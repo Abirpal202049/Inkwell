@@ -1,0 +1,91 @@
+/**
+ * IndexedDB `document-meta` store (plan/02-data-model.md, client schema).
+ *
+ * Powers the offline-capable dashboard: a small metadata record per
+ * document known to this device. The document *content* lives in the
+ * per-doc Yjs IndexedDB databases (doc-manager.ts); this store is just
+ * the list/index. Server metadata is merged in when online (Stage C+).
+ */
+
+export interface LocalDocMeta {
+  documentId: string;
+  title: string;
+  updatedAt: number; // epoch ms
+  createdAt: number;
+  role: "owner" | "editor" | "viewer";
+  /** Set when local edits exist that the server hasn't acked yet. */
+  dirty: boolean;
+  lastSyncedSeq: number;
+}
+
+const DB_NAME = "inkwell-db";
+const DB_VERSION = 1;
+const STORE = "document-meta";
+
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+function getDb(): Promise<IDBDatabase> {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        const store = db.createObjectStore(STORE, { keyPath: "documentId" });
+        store.createIndex("updatedAt", "updatedAt");
+      }
+      // Future versions add: outbox, version-cache (plan/02).
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return getDb().then(
+    (db) =>
+      new Promise<T>((resolve, reject) => {
+        const t = db.transaction(STORE, mode);
+        const req = run(t.objectStore(STORE));
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      }),
+  );
+}
+
+export async function listLocalDocs(): Promise<LocalDocMeta[]> {
+  const all = await tx<LocalDocMeta[]>("readonly", (s) => s.getAll());
+  return all.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function getLocalDoc(documentId: string): Promise<LocalDocMeta | undefined> {
+  return tx("readonly", (s) => s.get(documentId));
+}
+
+export function putLocalDoc(meta: LocalDocMeta): Promise<IDBValidKey> {
+  return tx("readwrite", (s) => s.put(meta));
+}
+
+export async function upsertLocalDoc(
+  documentId: string,
+  patch: Partial<Omit<LocalDocMeta, "documentId">>,
+): Promise<LocalDocMeta> {
+  const now = Date.now();
+  const existing = await getLocalDoc(documentId);
+  const merged: LocalDocMeta = {
+    documentId,
+    title: patch.title ?? existing?.title ?? "Untitled document",
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: patch.updatedAt ?? now,
+    role: patch.role ?? existing?.role ?? "owner",
+    dirty: patch.dirty ?? existing?.dirty ?? false,
+    lastSyncedSeq: patch.lastSyncedSeq ?? existing?.lastSyncedSeq ?? 0,
+  };
+  await putLocalDoc(merged);
+  return merged;
+}
+
+export function deleteLocalDoc(documentId: string): Promise<undefined> {
+  return tx("readwrite", (s) => s.delete(documentId) as IDBRequest<undefined>);
+}
