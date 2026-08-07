@@ -4,8 +4,8 @@
 
 | Component | Platform | Why |
 |---|---|---|
-| Next.js app (UI + Route Handlers) | Vercel | Native Next.js 16 support, preview deployments per PR, edge caching for static/marketing routes |
-| Collab WS server | Fly.io (or Render) | Needs a long-lived process for persistent WebSocket connections — not compatible with Vercel's serverless model (see [01-architecture.md](01-architecture.md)) |
+| Next.js app (frontend only) | Vercel | Native Next.js 16 support, preview deployments per PR; `/api/*` rewrite proxies to the backend |
+| Backend (Express REST + `@auth/express` + `ws` realtime, one process) | Fly.io (or Render) | Needs a long-lived process for persistent WebSocket connections — not compatible with Vercel's serverless model (see [01-architecture.md](01-architecture.md)) |
 | PostgreSQL | Neon | Serverless Postgres with branch-per-PR support — lets CI spin up an isolated real database per pull request for RLS/integration tests instead of mocking the DB |
 | AI provider | Groq/Gemini API | Managed, no hosting needed |
 

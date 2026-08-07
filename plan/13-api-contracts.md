@@ -6,6 +6,10 @@ on-the-fly protocol decisions** — implement exactly what's written here.
 
 ## Global Conventions
 
+- **All `/api/*` routes are served by the standalone Express backend**
+  (`backend/`), reached from the browser through the Next.js rewrite proxy
+  — so paths below are unchanged from the client's point of view. Auth
+  routes (`/api/auth/*`) are `@auth/express` mounts on the same app.
 - All REST responses are JSON with shape `{ ok: true, data: ... }` or
   `{ ok: false, error: { code: string, message: string } }`.
 - All REST routes require an authenticated Auth.js session unless noted.
@@ -196,13 +200,19 @@ both: WS-native ping/pong every 15s (server initiates; 2 missed pongs → close)
 ## Environment Variables (complete list, mirrored in `.env.example`)
 
 ```
+# backend/.env
 DATABASE_URL=                # Neon pooled connection string
 DIRECT_DATABASE_URL=         # Neon direct (for migrations)
 AUTH_SECRET=                 # Auth.js session JWT secret
 AUTH_GOOGLE_ID= / AUTH_GOOGLE_SECRET=
 AUTH_GITHUB_ID= / AUTH_GITHUB_SECRET=
-COLLAB_JWT_SECRET=           # shared between Next.js app and collab server
-NEXT_PUBLIC_COLLAB_WS_URL=   # wss://... of collab server
+AUTH_URL=                    # public URL auth callbacks resolve against
+COLLAB_JWT_SECRET=           # signs the short-lived WS tokens
+FRONTEND_ORIGIN=             # allowed origin for the WS upgrade check
 GROQ_API_KEY=                # (or GOOGLE_GENERATIVE_AI_API_KEY)
 SENTRY_DSN=                  # optional
+
+# frontend .env (Next.js)
+BACKEND_URL=                 # target of the /api/* rewrite proxy
+NEXT_PUBLIC_COLLAB_WS_URL=   # wss://... of the backend (WS connects direct)
 ```

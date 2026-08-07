@@ -2,9 +2,13 @@
 
 ## Authentication
 
-- **Auth.js (NextAuth) v5**, JWT session strategy (not database sessions) —
-  keeps the collab WS server able to verify identity statelessly without a
-  DB round trip on every connection.
+- **Auth.js core via `@auth/express`, mounted on the standalone Express
+  backend** (NOT in Next.js — the frontend has no auth code beyond reading
+  the session via `/api/auth/session` through the proxy). JWT session
+  strategy (not database sessions) — the WS layer in the same process can
+  verify identity statelessly without a DB round trip on every connection.
+- The Next.js rewrite proxy (`/api/*` → backend) keeps the session cookie
+  first-party, so no cross-site cookie configuration is needed.
 - **Providers: Google OAuth + GitHub OAuth only.** No credentials/password
   provider — deliberate decision:
   - Zero password storage = an entire attack class (credential stuffing,

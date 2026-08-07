@@ -49,24 +49,35 @@ env vars set.
       title intact; Ctrl+Z groups bursts; two tabs same doc converge
       (BroadcastChannel comes later, but y-indexeddb already cross-syncs).
 
-## Stage C — Phase 0 backend groundwork (needs Neon + OAuth secrets)
+## Stage C — Backend service groundwork (standalone, NOT in Next.js)
 
+> Decision (Aug 2026): all server logic lives in `backend/` — one Node
+> process: Express 5 (REST) + `@auth/express` (Google/GitHub OAuth) +
+> `ws` (realtime) + Prisma. Next.js proxies `/api/*` via a rewrite.
+
+- [ ] Convert repo to npm workspaces: root (frontend) + `backend/`;
+      shared `lib/constants.ts` + `lib/schemas/` imported by both.
+- [ ] `backend/src/server.ts` — Express app + `http.createServer` +
+      `server.on('upgrade')` for `ws`; `/healthz`.
 - [ ] Prisma schema per [02-data-model.md](02-data-model.md) (incl. Auth.js
       adapter tables), migrations.
-- [ ] Auth.js v5: Google + GitHub, JWT sessions, signin page, middleware
-      guarding `/documents/*` ([06-auth-security.md](06-auth-security.md)).
+- [ ] `@auth/express`: Google + GitHub, JWT sessions; frontend `/signin`
+      page posts to `/api/auth/signin/:provider` through the proxy;
+      session guard middleware for all document routes.
+- [ ] Next.js `next.config.ts` rewrite: `/api/:path*` → `${BACKEND_URL}`.
 - [ ] RLS policies SQL migration + `withUserContext()` transaction helper
       (`SET LOCAL app.user_id`).
-- [ ] REST routes per [13-api-contracts.md](13-api-contracts.md):
+- [ ] Express routes per [13-api-contracts.md](13-api-contracts.md):
       documents CRUD, members, versions, restore, token. zod schemas in
       `lib/schemas/`.
 - [ ] **Blocked on user-provided env:** `DATABASE_URL`, Google/GitHub
       OAuth client IDs/secrets. Code lands first with `.env.example`;
-      wiring verified once secrets exist.
+      wiring verified once secrets exist. (Local dev can run against a
+      local Postgres/docker if provided earlier.)
 
-## Stage D — Phase 2: Sync engine + collab server
+## Stage D — Phase 2: Sync engine + realtime layer
 
-- [ ] `collab-server/` Node process (`ws`): token auth on upgrade, rooms,
+- [ ] `backend/src/realtime/`: token auth on upgrade, rooms,
       y-protocols sync + awareness, JSON control frames, ack/idempotency
       via `processed_batches`, persistence to `doc_updates`, validation
       + size caps + rate limiting ([06](06-auth-security.md), [13](13-api-contracts.md)).
@@ -74,7 +85,7 @@ env vars set.
       heartbeat; `lib/sync/` protocol client.
 - [ ] BroadcastChannel leader election.
 - [ ] Presence cursors (named, deterministic colors), avatar stack.
-- [ ] Title mirror to Postgres on server.
+- [ ] Title mirror to Postgres on the backend.
 
 ## Stage E — Phases 3–5: verification, versions, sharing
 

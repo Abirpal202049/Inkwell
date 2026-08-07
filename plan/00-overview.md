@@ -72,17 +72,24 @@ The differentiator from a toy CRUD app is the engineering underneath:
 
 ## Tech Stack Summary
 
-- **Framework:** Next.js 16 (App Router, TypeScript, Server Actions + Route Handlers)
+> **Architecture decision (Aug 2026): the backend does NOT live in
+> Next.js.** Next.js 16 is the frontend only. All server logic — REST
+> API, OAuth, WebSocket collab — lives in one standalone Node.js service
+> (`backend/`). Next.js's sole server-side involvement is a rewrite rule
+> proxying `/api/*` to the backend so auth cookies stay first-party.
+
+- **Frontend:** Next.js 16 (App Router, TypeScript) — UI only, no API routes
+- **Backend:** standalone Node.js/TypeScript service — **Express 5** for
+  REST + **`@auth/express`** (official Auth.js integration) for OAuth +
+  **`ws`** for the realtime WebSocket, all in one process
 - **UI:** React 19, Tailwind CSS, shadcn/ui + Radix primitives
 - **Editor core:** Tiptap/ProseMirror (rich text) driven by a Yjs CRDT document
 - **CRDT:** Yjs (`Y.Doc`) — deterministic, battle-tested, supports awareness (presence)
 - **Client persistence:** IndexedDB via `y-indexeddb` + a custom outbox table
-- **Realtime transport:** WebSocket (custom Next.js-adjacent Node server or
-  Hocuspocus) with HTTP fallback for sync payload exchange
-- **Database:** PostgreSQL (Neon/Supabase) via Prisma or Drizzle ORM
-- **Auth:** Auth.js (NextAuth) with JWT sessions — **Google + GitHub OAuth
-  only, no passwords** (see [06-auth-security.md](06-auth-security.md))
-- **AI:** Vercel AI SDK + one provider (Groq or Gemini) for add-on features
+- **Database:** PostgreSQL (Neon) via Prisma
+- **Auth:** Auth.js core via `@auth/express` on the backend, JWT sessions —
+  **Google + GitHub OAuth only, no passwords** (see [06-auth-security.md](06-auth-security.md))
+- **AI:** Vercel AI SDK + one provider (Groq or Gemini), called from the backend
 - **Testing:** Vitest (unit/integration), Playwright (e2e), fast-check (property-based sync tests)
-- **Deployment:** Vercel (web) + a small persistent Node process for the WS
-  collab server (Fly.io/Render), Neon Postgres, GitHub Actions CI/CD
+- **Deployment:** Vercel (frontend) + the backend process on Fly.io/Render
+  (REST + WS together, one deploy target), Neon Postgres, GitHub Actions CI/CD

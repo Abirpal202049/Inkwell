@@ -42,21 +42,40 @@
 
 ## Why This Shape
 
+**Backend is a standalone service, NOT Next.js** (decision: Aug 2026).
+Next.js serves only the frontend. All server logic lives in `backend/` —
+a single Node.js/TypeScript process running:
+- **Express 5** — REST API (documents, members, versions, restore, tokens)
+- **`@auth/express`** — Auth.js core mounted on Express; Google + GitHub
+  OAuth and JWT session cookies, no Next.js involvement
+- **`ws`** — the realtime WebSocket, attached to the same HTTP server
+  (`server.on('upgrade', ...)`), so REST + WS share one port, one deploy,
+  one Prisma client
+
+The Next.js app reaches the backend through a rewrite in `next.config.ts`
+(`/api/:path*` → `${BACKEND_URL}/api/:path*`). This is pure reverse
+proxying — no backend logic in Next — and it keeps the Auth.js session
+cookie first-party (same origin as the frontend), avoiding third-party
+cookie/CORS pain entirely. The WebSocket connects directly to the backend
+host (browsers don't send the cookie for WS anyway — WS auth uses the
+short-lived token from [13-api-contracts.md](13-api-contracts.md)).
+
 **Two transports, one job split:**
 - **WebSocket channel** carries only Yjs binary update deltas (small, frequent,
   append-only) — this is what makes real-time collaboration fast and cheap.
-- **REST (Next.js Route Handlers)** carries auth, document metadata, named
-  version snapshots, restore operations, and the initial full-document sync
-  when a client first opens a doc or has been offline a long time. This keeps
+- **REST (Express)** carries auth, document metadata, named version
+  snapshots, restore operations, and the initial full-document sync when a
+  client first opens a doc or has been offline a long time. This keeps
   heavy/rare operations off the hot realtime path.
 
-**Why a separate collab server process instead of doing WS in Next.js
-route handlers:** Next.js serverless functions (on Vercel) are not designed
-for long-lived WebSocket connections. We run a small dedicated Node process
-(Hocuspocus, a Yjs-aware WS server, or a hand-rolled `ws` server) on a
-platform that supports persistent connections (Fly.io/Render/a VM). This is
-called out explicitly as a real-world deployment tradeoff in
-[11-scalability-tradeoffs.md](11-scalability-tradeoffs.md).
+**Why one backend process for both REST and WS:** Vercel serverless can't
+hold long-lived WebSocket connections, so a persistent Node process is
+required regardless; putting REST in the same process (instead of
+splitting REST onto Vercel) means one deploy target, one place secrets
+live, no duplicated auth/validation code, and REST handlers can share
+in-memory room state with the WS layer (e.g., broadcasting a role change
+to live sockets without a message bus). Horizontal scaling implications
+are covered in [11-scalability-tradeoffs.md](11-scalability-tradeoffs.md).
 
 **Why a Web Worker for the sync engine:** Keeps IndexedDB reads/writes,
 diffing, and retry/backoff logic off the main thread so rapid typing never
@@ -76,43 +95,42 @@ lag during rapid typing."
 4. **Sync Engine (Worker)** — owns connectivity detection, the push/pull
    protocol, retry/backoff, and reconciliation. Detailed in
    [03-sync-engine.md](03-sync-engine.md).
-5. **Server API Layer (Next.js Route Handlers + Server Actions)** — auth,
+5. **Server API Layer (Express on the backend)** — auth (`@auth/express`),
    document CRUD (metadata only), membership/roles, version snapshot CRUD.
-6. **Collab/WS Server** — authenticates the socket (short-lived token minted
-   by a Route Handler), joins a "room" per document, relays/persists Yjs
-   updates, enforces payload validation before touching the DB.
+6. **Collab/WS Layer (same backend process)** — authenticates the socket
+   (short-lived token minted by the REST layer), joins a "room" per
+   document, relays/persists Yjs updates, enforces payload validation
+   before touching the DB.
 7. **Database Layer (Postgres)** — durable log of Yjs updates + compacted
    snapshots + version history + RLS-enforced tenant isolation.
 
 ## Directory Structure (Next.js 16 App Router)
 
 ```
-/app
-  /(marketing)/page.tsx                     # landing + sign-in CTA + required footer
+/app                                        # Next.js = FRONTEND ONLY
+  page.tsx                                  # landing + sign-in CTA + required footer
   /signin/page.tsx                          # Google + GitHub OAuth buttons
-  /(app)/documents/page.tsx                 # dashboard (Recent/Owned/Shared tabs)
-  /(app)/documents/[docId]/page.tsx         # editor page
-  /(app)/documents/[docId]/history/page.tsx # version timeline
-  /api/auth/[...nextauth]/route.ts
-  /api/documents/route.ts                   # list/create
-  /api/documents/[docId]/route.ts           # metadata, share_mode (PATCH), delete
-  /api/documents/[docId]/members/...        # invites, role changes, removal
-  /api/documents/[docId]/versions/...       # list/create/fetch versions
-  /api/documents/[docId]/restore/route.ts   # restore to version
-  /api/documents/[docId]/token/route.ts     # mint short-lived WS auth token
-  /api/ai/[...]/route.ts                    # AI add-on endpoints
-  # full request/response contracts for every route: plan/13-api-contracts.md
-/collab-server                              # standalone Node WS process
-  server.ts
-  auth.ts
-  validation.ts
-  persistence.ts
-/lib
+  /documents/page.tsx                       # dashboard (Recent/Owned/Shared tabs)
+  /documents/[docId]/page.tsx               # editor page
+  /documents/[docId]/history/page.tsx       # version timeline
+  # NO /app/api — next.config.ts rewrites /api/* to the backend
+/backend                                    # standalone Node service (own package.json)
+  /src
+    server.ts                               # http server: Express app + ws upgrade
+    auth.ts                                 # @auth/express config (Google + GitHub)
+    /routes                                 # documents, members, versions, restore, token, ai
+    /realtime                               # rooms, y-protocols sync, awareness
+    validation.ts                           # zod schemas + size caps
+    persistence.ts                          # doc_updates append, compaction, snapshots
+    db.ts                                   # Prisma client + RLS SET LOCAL helper
+  /prisma/schema.prisma
+/lib                                        # frontend libs
   /crdt (Y.Doc setup, awareness)
   /sync (outbox, protocol, worker entry)
-  /db (Prisma/Drizzle client, RLS helpers)
-  /auth (Auth.js config, role guards)
+  /schemas (zod payloads — shared with backend via workspace import)
 /components (editor, history-timeline, presence, connection-badge, ...)
 /workers/sync-worker.ts
 /plan  ← this folder
+# Repo is an npm workspace: root (frontend) + backend/ share lib/schemas
+# and lib/constants so client and server always agree on the wire format.
 ```
