@@ -19,12 +19,13 @@ export interface LocalDocMeta {
 }
 
 const DB_NAME = "inkwell-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = "document-meta";
+export const OUTBOX_STORE = "outbox";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function getDb(): Promise<IDBDatabase> {
+export function getDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -34,7 +35,14 @@ function getDb(): Promise<IDBDatabase> {
         const store = db.createObjectStore(STORE, { keyPath: "documentId" });
         store.createIndex("updatedAt", "updatedAt");
       }
-      // Future versions add: outbox, version-cache (plan/02).
+      // v2: durable sync queue (plan/03 §Outbox Queue).
+      if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+        const outbox = db.createObjectStore(OUTBOX_STORE, {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+        outbox.createIndex("documentId", "documentId");
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

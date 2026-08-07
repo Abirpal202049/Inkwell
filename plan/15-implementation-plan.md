@@ -79,28 +79,49 @@ env vars set.
 
 ## Stage D — Phase 2: Sync engine + realtime layer
 
-- [ ] `backend/src/realtime/`: token auth on upgrade, rooms,
+- [x] `backend/src/realtime/`: token auth on upgrade, rooms,
       y-protocols sync + awareness, JSON control frames, ack/idempotency
       via `processed_batches`, persistence to `doc_updates`, validation
       + size caps + rate limiting ([06](06-auth-security.md), [13](13-api-contracts.md)).
-- [ ] `workers/sync-worker.ts` — outbox drain, backoff state machine,
-      heartbeat; `lib/sync/` protocol client.
-- [ ] BroadcastChannel leader election.
-- [ ] Presence cursors (named, deterministic colors), avatar stack.
-- [ ] Title mirror to Postgres on the backend.
+- [x] `frontend/lib/sync/` — outbox (IndexedDB, ack-gated deletes),
+      `SyncProvider` (WS client, y-protocols handshake, backoff state
+      machine, batch push/ack, live role messages).
+- [x] Presence cursors (named, deterministic colors), avatar stack.
+- [x] Title mirror to Postgres on the backend.
+
+**Deviations from the original design (deliberate, documented):**
+- The sync engine runs on the **main thread** (like y-websocket), not a
+  Web Worker — its work is async I/O, not CPU; typing-lag protection
+  comes from the ProseMirror/Yjs architecture. Worker migration remains
+  an optimization path if profiling ever demands it.
+- **Every tab connects** instead of BroadcastChannel leader election —
+  duplicate sends are idempotent by design (outbox + `processed_batches`),
+  so the extra connection is the only cost and the failure modes are
+  fewer.
 
 ## Stage E — Phases 3–5: verification, versions, sharing
 
-- [ ] fast-check convergence property tests; sync test matrix
-      ([09-testing-strategy.md](09-testing-strategy.md)).
-- [ ] Snapshots (auto + manual), history UI, restore-as-forward-edit.
-- [ ] Share dialog, pending invites, link sharing, live role downgrade.
+- [x] fast-check convergence property tests (100 random schedules),
+      restore-merge safety test, schema validation tests (`backend/test/`).
+- [ ] Remaining test matrix items from
+      [09-testing-strategy.md](09-testing-strategy.md): Playwright e2e
+      (offline simulation, two-context collaboration), RLS integration
+      tests against real Postgres.
+- [x] Snapshots (auto + manual), history UI (timeline + read-only
+      preview + restore), restore-as-forward-edit.
+- [x] Share dialog, pending invites, link sharing, live role downgrade.
 
 ## Stage F — Phases 6–8: AI, polish, deploy
 
-- [ ] AI slash command + summarize + auto version labels (AI SDK + Groq).
-- [ ] A11y pass, Playwright e2e, GitHub Actions, Vercel + Fly deploy,
-      README.
+- [ ] **AI features — DEFERRED by user decision (Aug 2026).** Design
+      stays in [08-ai-features.md](08-ai-features.md) for later.
+- [x] GitHub Actions CI (backend typecheck + tests, frontend build).
+- [x] Backend Dockerfile (build from repo root).
+- [ ] Deploy: push to GitHub, Vercel (root dir `frontend/`), Fly/Render
+      (backend Dockerfile), Neon DB, OAuth secrets in prod env,
+      real profile links in `frontend/lib/profile.ts` — **needs user
+      accounts/credentials**.
+- [ ] A11y polish pass + Playwright e2e (post-deploy).
 
 ## Working agreements
 

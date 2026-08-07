@@ -3,17 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Plus, Search } from "lucide-react";
+import { FileText, Plus, Search, LogIn, LogOut } from "lucide-react";
 import { listLocalDocs, upsertLocalDoc, type LocalDocMeta } from "@/lib/local/meta-store";
 import { relativeTime, cn } from "@/lib/utils";
 import { DEFAULT_DOC_TITLE } from "@/lib/constants";
+import { getSession, listDocuments, type SessionUser } from "@/lib/api";
 import { SiteFooter } from "@/components/SiteFooter";
 
 /**
- * Google-Docs-style home (plan/14 §4). Stage B: renders purely from the
- * local IndexedDB meta store, so it works fully offline. Server-side
- * lists and the Owned/Shared tabs light up in Stage C when auth and the
- * documents API exist — the tab UI contract is in place now.
+ * Google-Docs-style home (plan/14 §4). Renders instantly from the local
+ * IndexedDB meta store (stale-while-revalidate, works fully offline);
+ * when a session exists the server list is merged in so shared documents
+ * and fresh roles appear.
  */
 type Tab = "recent" | "owned" | "shared";
 
@@ -22,10 +23,28 @@ export function Dashboard() {
   const [docs, setDocs] = useState<LocalDocMeta[] | null>(null);
   const [tab, setTab] = useState<Tab>("recent");
   const [filter, setFilter] = useState("");
+  const [session, setSession] = useState<SessionUser | null | undefined>(undefined);
 
   useEffect(() => {
     void listLocalDocs().then(setDocs);
+    void getSession().then(setSession);
   }, []);
+
+  // Merge the server's list into the local cache (plan/14 §4).
+  useEffect(() => {
+    if (!session) return;
+    void listDocuments().then(async (result) => {
+      if (!result) return;
+      for (const d of result.documents) {
+        await upsertLocalDoc(d.id, {
+          title: d.title,
+          role: d.role,
+          updatedAt: new Date(d.updatedAt).getTime(),
+        });
+      }
+      setDocs(await listLocalDocs());
+    });
+  }, [session]);
 
   const createDocument = async () => {
     const id = crypto.randomUUID();
@@ -55,6 +74,35 @@ export function Dashboard() {
               className="w-full rounded-full border border-zinc-200 bg-zinc-50 py-1.5 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800"
             />
           </div>
+          {session === null && (
+            <a
+              href="/api/auth/signin"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign in
+            </a>
+          )}
+          {session && (
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-sm font-medium dark:bg-zinc-700">
+                {session.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- tiny external avatar
+                  <img src={session.image} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  (session.name ?? session.email).slice(0, 1).toUpperCase()
+                )}
+              </span>
+              <a
+                href="/api/auth/signout"
+                title="Sign out"
+                aria-label="Sign out"
+                className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                <LogOut className="h-4 w-4" />
+              </a>
+            </div>
+          )}
         </div>
       </header>
 

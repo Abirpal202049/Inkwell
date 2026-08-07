@@ -103,16 +103,7 @@ export function attachRealtime(server: HttpServer): void {
   });
 }
 
-async function handleConnection(ws: WebSocket, documentId: string, conn: ConnState): Promise<void> {
-  let room: Room;
-  try {
-    room = await joinRoom(documentId);
-  } catch {
-    ws.close(1011, "failed to load document");
-    return;
-  }
-  room.conns.set(ws, conn);
-
+function handleConnection(ws: WebSocket, documentId: string, conn: ConnState): void {
   const bucket: RateBucket = { count: 0, windowStart: Date.now() };
   /** Awareness client ids this socket announced (for cleanup on close). */
   const awarenessIds = new Set<number>();
@@ -129,52 +120,74 @@ async function handleConnection(ws: WebSocket, documentId: string, conn: ConnSta
     ws.ping();
   }, WS_HEARTBEAT_MS);
 
-  // Initial handshake: send our state vector (step1) + current awareness,
-  // mirroring y-websocket so standard clients interoperate.
-  {
-    const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, MESSAGE_SYNC);
-    writeSyncStep1(encoder, room.doc);
-    ws.send(encoding.toUint8Array(encoder));
+  // Room loading is async (first join reads Postgres), but frames can
+  // arrive the instant the socket opens — so listeners are registered
+  // SYNCHRONOUSLY and every frame queues behind the room promise. The
+  // same chain also serializes frames per connection: a push
+  // announcement's async batch registration must complete before the
+  // update frames behind it are handled (both found by the ws smoke test).
+  const roomReady: Promise<Room | null> = joinRoom(documentId)
+    .then((room) => {
+      room.conns.set(ws, conn);
 
-    const states = room.awareness.getStates();
-    if (states.size > 0) {
-      const awarenessEncoder = encoding.createEncoder();
-      encoding.writeVarUint(awarenessEncoder, MESSAGE_AWARENESS);
-      encoding.writeVarUint8Array(
-        awarenessEncoder,
-        encodeAwarenessUpdate(room.awareness, [...states.keys()]),
-      );
-      ws.send(encoding.toUint8Array(awarenessEncoder));
-    }
-  }
+      // Initial handshake: our state vector (step1) + current awareness,
+      // mirroring y-websocket so standard clients interoperate.
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, MESSAGE_SYNC);
+      writeSyncStep1(encoder, room.doc);
+      ws.send(encoding.toUint8Array(encoder));
 
+      const states = room.awareness.getStates();
+      if (states.size > 0) {
+        const awarenessEncoder = encoding.createEncoder();
+        encoding.writeVarUint(awarenessEncoder, MESSAGE_AWARENESS);
+        encoding.writeVarUint8Array(
+          awarenessEncoder,
+          encodeAwarenessUpdate(room.awareness, [...states.keys()]),
+        );
+        ws.send(encoding.toUint8Array(awarenessEncoder));
+      }
+      return room;
+    })
+    .catch(() => {
+      ws.close(1011, "failed to load document");
+      return null;
+    });
+
+  let processing: Promise<unknown> = roomReady;
   ws.on("message", (data: Buffer, isBinary: boolean) => {
     if (rateLimited(bucket)) {
       ws.close(4429, "rate limited");
       return;
     }
-
-    if (!isBinary) {
-      handleControlFrame(ws, room, conn, data);
-      return;
-    }
-
-    try {
-      handleBinaryFrame(ws, room, conn, new Uint8Array(data), awarenessIds);
-    } catch {
-      // Malformed frame: never crash the room for everyone (plan/06).
-      ws.close(1003, "malformed frame");
-    }
+    processing = processing
+      .then(async () => {
+        const room = await roomReady;
+        if (!room) return;
+        return isBinary
+          ? handleBinaryFrame(ws, room, conn, new Uint8Array(data), awarenessIds)
+          : handleControlFrame(ws, room, conn, data);
+      })
+      .catch(() => {
+        // Malformed frame: never crash the room for everyone (plan/06).
+        ws.close(1003, "malformed frame");
+      });
   });
 
   ws.on("close", () => {
     clearInterval(heartbeat);
-    leaveRoom(room, ws, [...awarenessIds]);
+    void roomReady.then((room) => {
+      if (room) leaveRoom(room, ws, [...awarenessIds]);
+    });
   });
 }
 
-function handleControlFrame(ws: WebSocket, room: Room, conn: ConnState, data: Buffer): void {
+async function handleControlFrame(
+  ws: WebSocket,
+  room: Room,
+  conn: ConnState,
+  data: Buffer,
+): Promise<void> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(data.toString("utf8"));
@@ -191,36 +204,35 @@ function handleControlFrame(ws: WebSocket, room: Room, conn: ConnState, data: Bu
 
   if (msg.t === "push") {
     if (conn.role === "viewer") return; // viewers cannot push (plan/06)
-    void findBatch(room.documentId, msg.batchId).then((ackedSeq) => {
-      if (ackedSeq !== null) {
-        // Idempotent replay: re-ack with the original seq; the coming
-        // update frames will be applied (harmless) but not re-persisted.
-        conn.pendingBatch = {
-          batchId: msg.batchId,
-          remaining: msg.count,
-          skipPersist: true,
-          lastSeq: ackedSeq,
-        };
-        ws.send(JSON.stringify({ t: "ack", batchId: msg.batchId, seq: Number(ackedSeq) }));
-      } else {
-        conn.pendingBatch = {
-          batchId: msg.batchId,
-          remaining: msg.count,
-          skipPersist: false,
-          lastSeq: 0n,
-        };
-      }
-    });
+    const ackedSeq = await findBatch(room.documentId, msg.batchId);
+    if (ackedSeq !== null) {
+      // Idempotent replay: re-ack with the original seq; the coming
+      // update frames will be applied (harmless) but not re-persisted.
+      conn.pendingBatch = {
+        batchId: msg.batchId,
+        remaining: msg.count,
+        skipPersist: true,
+        lastSeq: ackedSeq,
+      };
+      ws.send(JSON.stringify({ t: "ack", batchId: msg.batchId, seq: Number(ackedSeq) }));
+    } else {
+      conn.pendingBatch = {
+        batchId: msg.batchId,
+        remaining: msg.count,
+        skipPersist: false,
+        lastSeq: 0n,
+      };
+    }
   }
 }
 
-function handleBinaryFrame(
+async function handleBinaryFrame(
   ws: WebSocket,
   room: Room,
   conn: ConnState,
   data: Uint8Array,
   awarenessIds: Set<number>,
-): void {
+): Promise<void> {
   const decoder = decoding.createDecoder(data);
   const messageType = decoding.readVarUint(decoder);
 
@@ -270,41 +282,40 @@ function handleBinaryFrame(
     const update = decoding.readVarUint8Array(decoder);
     const batch = conn.pendingBatch;
 
-    void room
-      .applyAndPersist(update, conn, batch?.skipPersist ?? false)
-      .then(async (seq) => {
-        broadcastUpdate(room, update, ws);
+    try {
+      const seq = await room.applyAndPersist(update, conn, batch?.skipPersist ?? false);
+      broadcastUpdate(room, update, ws);
 
-        // Semantic size cap: reject documents grown past the limit
-        // (plan/06 §5). Checked post-apply; the offending client is
-        // disconnected and the oversized state is not snapshotted.
-        if (Y.encodeStateAsUpdate(room.doc).byteLength > DOC_MAX_BYTES) {
-          ws.close(4413, "document too large");
-          return;
-        }
+      // Semantic size cap: reject documents grown past the limit
+      // (plan/06 §5). Checked post-apply; the offending client is
+      // disconnected and the oversized state is not snapshotted.
+      if (Y.encodeStateAsUpdate(room.doc).byteLength > DOC_MAX_BYTES) {
+        ws.close(4413, "document too large");
+        return;
+      }
 
-        if (batch) {
-          if (seq !== null) batch.lastSeq = seq;
-          batch.remaining--;
-          if (batch.remaining <= 0) {
-            conn.pendingBatch = null;
-            if (!batch.skipPersist) {
-              await recordBatch(room.documentId, batch.batchId, batch.lastSeq);
-              ws.send(
-                JSON.stringify({ t: "ack", batchId: batch.batchId, seq: Number(batch.lastSeq) }),
-              );
-            }
-            room.maintain();
-          }
-        }
-      })
-      .catch(() => {
-        if (batch) {
+      if (batch) {
+        if (seq !== null) batch.lastSeq = seq;
+        batch.remaining--;
+        if (batch.remaining <= 0) {
           conn.pendingBatch = null;
-          ws.send(
-            JSON.stringify({ t: "nack", batchId: batch.batchId, code: "PERSIST_FAILED", retryable: true }),
-          );
+          if (!batch.skipPersist) {
+            await recordBatch(room.documentId, batch.batchId, batch.lastSeq);
+            ws.send(
+              JSON.stringify({ t: "ack", batchId: batch.batchId, seq: Number(batch.lastSeq) }),
+            );
+          }
+          room.maintain();
         }
-      });
+      }
+    } catch (err) {
+      console.error("[realtime] persist failed:", err);
+      if (batch) {
+        conn.pendingBatch = null;
+        ws.send(
+          JSON.stringify({ t: "nack", batchId: batch.batchId, code: "PERSIST_FAILED", retryable: true }),
+        );
+      }
+    }
   }
 }

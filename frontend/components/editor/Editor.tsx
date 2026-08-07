@@ -3,12 +3,14 @@
 import { useEditor, EditorContent, type Editor as TiptapEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import type * as Y from "yjs";
+import type { SyncProvider } from "@/lib/sync/provider";
 import { CONTENT_FRAGMENT } from "@/lib/crdt/doc-manager";
 
 /**
@@ -18,10 +20,22 @@ import { CONTENT_FRAGMENT } from "@/lib/crdt/doc-manager";
  *   undo plugin, which tracks only locally-originated transactions —
  *   this IS the per-user undo behavior from plan/14 §1 (Ctrl+Z never
  *   reverts a collaborator's edit).
+ * - CollaborationCaret renders named remote cursors with each user's
+ *   deterministic color (plan/14 §2) when a sync provider is active.
  * - immediatelyRender: false — required with SSR to avoid hydration
  *   mismatches; the editor mounts client-side only.
  */
-export function useInkwellEditor(ydoc: Y.Doc, editable: boolean): TiptapEditor | null {
+
+export interface CollabContext {
+  provider: SyncProvider;
+  user: { name: string; color: string };
+}
+
+export function useInkwellEditor(
+  ydoc: Y.Doc,
+  editable: boolean,
+  collab?: CollabContext | null,
+): TiptapEditor | null {
   return useEditor(
     {
       immediatelyRender: false,
@@ -32,6 +46,9 @@ export function useInkwellEditor(ydoc: Y.Doc, editable: boolean): TiptapEditor |
           link: { openOnClick: false, autolink: true },
         }),
         Collaboration.configure({ document: ydoc, field: CONTENT_FRAGMENT }),
+        ...(collab
+          ? [CollaborationCaret.configure({ provider: collab.provider, user: collab.user })]
+          : []),
         Highlight,
         TextAlign.configure({ types: ["heading", "paragraph"] }),
         TaskList,
@@ -46,7 +63,7 @@ export function useInkwellEditor(ydoc: Y.Doc, editable: boolean): TiptapEditor |
         },
       },
     },
-    [ydoc, editable],
+    [ydoc, editable, collab?.provider ?? null],
   );
 }
 

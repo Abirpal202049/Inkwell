@@ -79,8 +79,13 @@ export class Room {
    * for an idempotent batch replay).
    */
   applyAndPersist(update: Uint8Array, conn: ConnState, skipPersist: boolean): Promise<bigint | null> {
+    const before = Y.encodeStateVector(this.doc);
     Y.applyUpdate(this.doc, update, conn);
     if (skipPersist) return Promise.resolve(null);
+    // No-op updates (e.g. a reconnecting client's full-state step2 reply
+    // that we already have) advance nothing — don't log redundant rows.
+    const after = Y.encodeStateVector(this.doc);
+    if (Buffer.from(before).equals(Buffer.from(after))) return Promise.resolve(null);
     const task = this.persistChain.then(() => appendUpdate(this.documentId, conn.userId, update));
     // Keep the chain alive even if one append fails (client will retry the batch).
     this.persistChain = task.catch(() => {});

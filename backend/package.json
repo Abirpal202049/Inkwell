@@ -8,7 +8,8 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "test": "vitest run"
   },
   "dependencies": {
     "@auth/express": "^0.12.3",
@@ -28,7 +29,9 @@
     "@types/express": "^5.0.5",
     "@types/node": "^20",
     "@types/ws": "^8.18.1",
+    "fast-check": "^3.23.2",
     "prisma": "^6.19.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }
