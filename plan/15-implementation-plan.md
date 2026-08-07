@@ -2,7 +2,9 @@
 
 This is the concrete, file-level build order. Design docs 00–14 are the
 "why"; this is the "what, in what order." Check items off as they land.
-Repo root = the Next.js app; `plan/` = docs; `collab-server/` = WS process.
+Repo layout: `frontend/` (Next.js UI), `backend/` (Express + Auth.js +
+ws + Prisma), `plan/` (docs), root `docker-compose.yml` (local Postgres —
+`npm run db:up`, then `npm run db:migrate` + apply `backend/prisma/rls.sql`).
 
 ## Stage A — Scaffold (no external services needed)
 

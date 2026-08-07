@@ -7,6 +7,11 @@
 | Next.js app (frontend only) | Vercel | Native Next.js 16 support, preview deployments per PR; `/api/*` rewrite proxies to the backend |
 | Backend (Express REST + `@auth/express` + `ws` realtime, one process) | Fly.io (or Render) | Needs a long-lived process for persistent WebSocket connections — not compatible with Vercel's serverless model (see [01-architecture.md](01-architecture.md)) |
 | PostgreSQL | Neon | Serverless Postgres with branch-per-PR support — lets CI spin up an isolated real database per pull request for RLS/integration tests instead of mocking the DB |
+
+Local development runs Postgres via the root `docker-compose.yml`
+(`npm run db:up`) so the full stack — migrations, RLS, sync — works
+offline with zero cloud dependencies; Neon is production/CI only.
+Note: the Vercel project's Root Directory must be set to `frontend/`.
 | AI provider | Groq/Gemini API | Managed, no hosting needed |
 
 ## Environments

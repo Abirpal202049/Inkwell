@@ -107,30 +107,36 @@ lag during rapid typing."
 ## Directory Structure (Next.js 16 App Router)
 
 ```
-/app                                        # Next.js = FRONTEND ONLY
-  page.tsx                                  # landing + sign-in CTA + required footer
-  /signin/page.tsx                          # Google + GitHub OAuth buttons
-  /documents/page.tsx                       # dashboard (Recent/Owned/Shared tabs)
-  /documents/[docId]/page.tsx               # editor page
-  /documents/[docId]/history/page.tsx       # version timeline
-  # NO /app/api — next.config.ts rewrites /api/* to the backend
+# Repo root: three folders + local-dev infra (npm workspaces)
+/frontend                                   # Next.js 16 app — UI ONLY
+  /app
+    page.tsx                                # landing + sign-in CTA + required footer
+    /signin/page.tsx                        # Google + GitHub OAuth buttons
+    /documents/page.tsx                     # dashboard (Recent/Owned/Shared tabs)
+    /documents/[docId]/page.tsx             # editor page
+    /documents/[docId]/history/page.tsx     # version timeline
+    # NO /app/api — next.config.ts rewrites /api/* to the backend
+  /components (editor, history-timeline, presence, connection-badge, ...)
+  /lib
+    /crdt (Y.Doc setup, awareness)
+    /sync (outbox, protocol, worker entry)
+    /local (IndexedDB meta store)
+    /schemas (zod payloads — imported by backend via @shared/* path alias)
+    constants.ts                            # every tuning constant (plan/13)
+  /workers/sync-worker.ts
 /backend                                    # standalone Node service (own package.json)
   /src
     server.ts                               # http server: Express app + ws upgrade
     auth.ts                                 # @auth/express config (Google + GitHub)
-    /routes                                 # documents, members, versions, restore, token, ai
-    /realtime                               # rooms, y-protocols sync, awareness
-    validation.ts                           # zod schemas + size caps
-    persistence.ts                          # doc_updates append, compaction, snapshots
     db.ts                                   # Prisma client + RLS SET LOCAL helper
-  /prisma/schema.prisma
-/lib                                        # frontend libs
-  /crdt (Y.Doc setup, awareness)
-  /sync (outbox, protocol, worker entry)
-  /schemas (zod payloads — shared with backend via workspace import)
-/components (editor, history-timeline, presence, connection-badge, ...)
-/workers/sync-worker.ts
+    /routes                                 # documents, members, versions, token
+    /realtime                               # rooms, y-protocols sync, awareness, tokens
+    /persistence                            # doc_updates append, compaction, snapshots
+  /prisma
+    schema.prisma
+    rls.sql                                 # Row Level Security policies
 /plan  ← this folder
-# Repo is an npm workspace: root (frontend) + backend/ share lib/schemas
-# and lib/constants so client and server always agree on the wire format.
+docker-compose.yml                          # local Postgres for development
+# The backend imports frontend/lib/{constants,schemas} via the @shared/*
+# tsconfig path so client and server always agree on the wire format.
 ```

@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Inkwell — local-first collaborative docs
 
-## Getting Started
+A local-first, collaborative document editor with offline synchronization,
+deterministic CRDT conflict resolution, and granular version history.
+Built for the House of Edtech Fullstack Assignment (v2.1).
 
-First, run the development server:
+## Repository layout
+
+| Folder | Contents |
+|---|---|
+| [`frontend/`](frontend/) | Next.js 16 app (UI only — no server logic) |
+| [`backend/`](backend/) | Standalone Node service: Express REST + Auth.js (Google/GitHub OAuth) + Yjs realtime WebSocket + Prisma |
+| [`plan/`](plan/) | Full design & build plan — start at [`plan/00-overview.md`](plan/00-overview.md) |
+| `docker-compose.yml` | Local Postgres for development |
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. install (npm workspaces: frontend + backend)
+npm install
+
+# 2. start local Postgres (Docker)
+npm run db:up
+
+# 3. configure the backend
+cp backend/.env.example backend/.env   # fill in OAuth secrets (see below)
+
+# 4. create the database schema + RLS policies
+npm run db:migrate
+docker exec -i inkwell-postgres psql -U inkwell -d inkwell < backend/prisma/rls.sql
+
+# 5. run both processes (two terminals)
+npm run dev:backend    # Express + WebSocket on :4000
+npm run dev            # Next.js on :3000 (proxies /api/* to :4000)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+OAuth: create a Google OAuth client and a GitHub OAuth app, both with
+callback `http://localhost:3000/api/auth/callback/<provider>`, and put the
+IDs/secrets in `backend/.env`. Without them the app still runs — documents
+work fully offline — but sign-in and sync stay disabled.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Architecture in one paragraph
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The browser's IndexedDB (a Yjs CRDT log) is the source of truth — every
+edit applies locally with zero network involvement. A background sync
+engine pushes update deltas through a durable outbox over WebSocket and
+merges remote changes; CRDT semantics make the merge deterministic and
+lossless regardless of how long a client was offline. Postgres stores an
+append-only update log (compacted periodically), user-facing version
+snapshots, and enforces tenant isolation with Row Level Security. Details:
+[`plan/01-architecture.md`](plan/01-architecture.md).

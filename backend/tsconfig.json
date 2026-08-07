@@ -14,8 +14,8 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
-      "@shared/*": ["../lib/*"]
+      "@shared/*": ["../frontend/lib/*"]
     }
   },
-  "include": ["src/**/*.ts", "../lib/constants.ts", "../lib/schemas/**/*.ts"]
+  "include": ["src/**/*.ts", "../frontend/lib/constants.ts", "../frontend/lib/schemas/**/*.ts"]
 }

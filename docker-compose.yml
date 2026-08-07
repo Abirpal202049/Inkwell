@@ -1,0 +1,25 @@
+# Local development infrastructure (plan/10).
+# Postgres for the backend: `npm run db:up` (or `docker compose up -d`).
+# Production uses Neon; this mirrors it locally so migrations, RLS and the
+# full sync flow are testable offline.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: inkwell-postgres
+    environment:
+      POSTGRES_USER: inkwell
+      POSTGRES_PASSWORD: inkwell
+      POSTGRES_DB: inkwell
+    ports:
+      - "5432:5432"
+    volumes:
+      - inkwell-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inkwell -d inkwell"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  inkwell-pgdata:
