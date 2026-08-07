@@ -25,8 +25,23 @@ app.get("/healthz", (_req, res) => {
   res.json({ ok: true, uptime: process.uptime() });
 });
 
+// The Next.js rewrite proxy targets this process directly, so the Host
+// header is our internal host — but Auth.js builds OAuth redirect_uris
+// from it. Restore the original public host from X-Forwarded-Host (sent
+// by Next's proxy and by production load balancers) so redirect_uris
+// match the callback URLs registered with Google/GitHub.
+app.use((req, _res, next) => {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  if (typeof forwardedHost === "string" && forwardedHost.length > 0) {
+    req.headers.host = forwardedHost;
+  }
+  next();
+});
+
 // Auth.js: /api/auth/* (signin, callback, session, signout).
-app.use("/api/auth/{*path}", authHandler);
+// Plain prefix mount — a wildcard pattern here would strip the action
+// segment from req.url before Auth.js routes on it.
+app.use("/api/auth", authHandler);
 
 // Session-aware REST routes.
 app.use("/api", attachSession);
