@@ -1,0 +1,211 @@
+// Data model per plan/02-data-model.md. Auth.js adapter models (User,
+// Account) follow the @auth/prisma-adapter shape; sessions are JWT so no
+// Session table is needed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  // Lowercased before storage — invite claiming compares lowercase.
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  accounts       Account[]
+  memberships    DocumentMember[]
+  ownedDocuments Document[]       @relation("owner")
+  updates        DocUpdate[]
+  versions       DocumentVersion[]
+  comments       Comment[]
+
+  @@map("users")
+}
+
+// One row per linked OAuth provider (Google, GitHub) — plan/06.
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+enum DocumentRole {
+  owner
+  editor
+  viewer
+
+  @@map("document_role")
+}
+
+enum ShareMode {
+  private
+  link_view @map("link-view")
+  link_edit @map("link-edit")
+
+  @@map("share_mode")
+}
+
+enum GrantedVia {
+  invite
+  link
+
+  @@map("granted_via")
+}
+
+model Document {
+  id        String    @id @default(uuid()) @db.Uuid
+  // Mirror of Y.Map('meta').title, maintained by the realtime layer for
+  // cheap dashboard queries (plan/14 §3). Source of truth is the Y.Doc.
+  title     String    @default("Untitled document")
+  ownerId   String    @map("owner_id") @db.Uuid
+  shareMode ShareMode @default(private) @map("share_mode")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  // Per-document monotonic sequence; assigned transactionally on append.
+  latestSeq BigInt    @default(0) @map("latest_seq")
+
+  owner            User              @relation("owner", fields: [ownerId], references: [id])
+  members          DocumentMember[]
+  pendingInvites   PendingInvite[]
+  updates          DocUpdate[]
+  compaction       DocCompaction?
+  versions         DocumentVersion[]
+  processedBatches ProcessedBatch[]
+  comments         Comment[]
+
+  @@map("documents")
+}
+
+model DocumentMember {
+  documentId String       @map("document_id") @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  role       DocumentRole
+  grantedVia GrantedVia   @default(invite) @map("granted_via")
+  invitedAt  DateTime     @default(now()) @map("invited_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userId])
+  @@map("document_members")
+}
+
+model PendingInvite {
+  documentId String       @map("document_id") @db.Uuid
+  email      String
+  role       DocumentRole
+  invitedBy  String?      @map("invited_by") @db.Uuid
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, email])
+  @@map("pending_invites")
+}
+
+// Append-only log of Yjs binary update deltas — the durable CRDT op log.
+model DocUpdate {
+  id          BigInt   @id @default(autoincrement())
+  documentId  String   @map("document_id") @db.Uuid
+  seq         BigInt
+  updateBytes Bytes    @map("update_bytes")
+  authorId    String?  @map("author_id") @db.Uuid
+  byteSize    Int      @map("byte_size")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User?    @relation(fields: [authorId], references: [id])
+
+  @@unique([documentId, seq])
+  @@index([documentId, seq])
+  @@map("doc_updates")
+}
+
+// Internal storage optimization: squashed state so loads don't replay the
+// whole log (plan/11). Distinct from user-facing DocumentVersion.
+model DocCompaction {
+  documentId  String   @id @map("document_id") @db.Uuid
+  stateBytes  Bytes    @map("state_bytes")
+  upToSeq     BigInt   @map("up_to_seq")
+  compactedAt DateTime @default(now()) @map("compacted_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("doc_compactions")
+}
+
+// User-facing version snapshots for Time Travel (plan/05).
+model DocumentVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  label      String?
+  stateBytes Bytes    @map("state_bytes")
+  createdBy  String?  @map("created_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+  isAuto     Boolean  @default(false) @map("is_auto")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User?    @relation(fields: [createdBy], references: [id])
+
+  @@index([documentId, createdAt(sort: Desc)])
+  @@map("document_versions")
+}
+
+// Idempotency ledger for sync batches (plan/13). Replays re-ack, never
+// re-insert. Pruned after 7 days.
+model ProcessedBatch {
+  documentId String   @map("document_id") @db.Uuid
+  batchId    String   @map("batch_id") @db.Uuid
+  ackedSeq   BigInt   @map("acked_seq")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, batchId])
+  @@map("processed_batches")
+}
+
+// Stretch feature (plan/14 §6) — schema fixed now. Anchors are serialized
+// Y.RelativePosition values, never absolute offsets.
+model Comment {
+  id         String    @id @default(uuid()) @db.Uuid
+  documentId String    @map("document_id") @db.Uuid
+  authorId   String    @map("author_id") @db.Uuid
+  body       String
+  anchor     Bytes
+  head       Bytes
+  parentId   String?   @map("parent_id") @db.Uuid
+  resolvedAt DateTime? @map("resolved_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id])
+  parent   Comment?  @relation("thread", fields: [parentId], references: [id])
+  replies  Comment[] @relation("thread")
+
+  @@index([documentId, createdAt])
+  @@map("comments")
+}
