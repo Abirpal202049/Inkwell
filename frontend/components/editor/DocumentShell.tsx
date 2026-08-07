@@ -11,7 +11,7 @@ import { presenceColor } from "@/lib/utils";
 import { getSession, getDocument, createVersion, type SessionUser } from "@/lib/api";
 import { SyncProvider, type SyncState } from "@/lib/sync/provider";
 import { ConnectionBadge, type ConnectionState } from "@/components/ConnectionBadge";
-import { SiteFooter } from "@/components/SiteFooter";
+import { AuthorCredit } from "@/components/SiteFooter";
 import { useInkwellEditor, EditorSurface, type CollabContext } from "./Editor";
 import { Toolbar } from "./Toolbar";
 import { TitleInput } from "./TitleInput";
@@ -202,21 +202,25 @@ export function DocumentShell({ docId }: { docId: string }) {
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex flex-1 flex-col overflow-y-auto">
         {loaded ? (
           <EditorSurface editor={editor} />
         ) : (
-          <div className="mx-auto my-6 h-[70vh] w-full max-w-[820px] animate-pulse rounded-sm bg-white dark:bg-zinc-900" />
+          <div className="mx-auto my-6 w-full max-w-[820px] flex-1 animate-pulse rounded-sm bg-white dark:bg-zinc-900" />
         )}
       </main>
 
-      <div className="flex items-center justify-between border-t border-zinc-200 bg-white px-3 py-1 dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Single status bar: word count left, author credit centered
+          (submission requirement), transient notices right. */}
+      <div className="relative flex items-center justify-between border-t border-zinc-200 bg-white px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900">
         <StatusFooter editor={editor} />
+        <span className="absolute left-1/2 -translate-x-1/2 max-sm:hidden">
+          <AuthorCredit />
+        </span>
         {savingVersion === "saved" && (
           <span className="text-xs text-emerald-600 dark:text-emerald-400">Version saved</span>
         )}
       </div>
-      <SiteFooter />
 
       <ShareDialog docId={docId} open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>

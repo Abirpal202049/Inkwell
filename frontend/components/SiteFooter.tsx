@@ -18,31 +18,41 @@ function LinkedinIcon({ className }: { className?: string }) {
   );
 }
 
+/** The credit row alone — embeddable inside other bars (e.g. the editor
+ *  status bar), so pages don't need a second stacked footer. */
+export function AuthorCredit() {
+  return (
+    <span className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+      <span>
+        Built by <span className="font-medium text-zinc-700 dark:text-zinc-200">{AUTHOR.name}</span>
+      </span>
+      <a
+        href={AUTHOR.github}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100"
+      >
+        <GithubIcon className="h-3.5 w-3.5" />
+        GitHub
+      </a>
+      <a
+        href={AUTHOR.linkedin}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100"
+      >
+        <LinkedinIcon className="h-3.5 w-3.5" />
+        LinkedIn
+      </a>
+    </span>
+  );
+}
+
 export function SiteFooter() {
   return (
-    <footer className="border-t border-zinc-200 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-      <div className="mx-auto flex max-w-5xl items-center justify-center gap-4">
-        <span>
-          Built by <span className="font-medium text-zinc-700 dark:text-zinc-200">{AUTHOR.name}</span>
-        </span>
-        <a
-          href={AUTHOR.github}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100"
-        >
-          <GithubIcon className="h-3.5 w-3.5" />
-          GitHub
-        </a>
-        <a
-          href={AUTHOR.linkedin}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100"
-        >
-          <LinkedinIcon className="h-3.5 w-3.5" />
-          LinkedIn
-        </a>
+    <footer className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="mx-auto flex max-w-5xl items-center justify-center">
+        <AuthorCredit />
       </div>
     </footer>
   );

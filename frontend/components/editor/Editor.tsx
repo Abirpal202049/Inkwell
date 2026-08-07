@@ -58,7 +58,7 @@ export function useInkwellEditor(
       editorProps: {
         attributes: {
           class:
-            "tiptap-content focus:outline-none min-h-[65vh] px-12 py-10 max-sm:px-6 max-sm:py-6",
+            "tiptap-content flex-1 focus:outline-none min-h-[65vh] px-12 py-10 max-sm:px-6 max-sm:py-6",
           "aria-label": "Document content",
         },
       },
@@ -69,8 +69,8 @@ export function useInkwellEditor(
 
 export function EditorSurface({ editor }: { editor: TiptapEditor | null }) {
   return (
-    <div className="mx-auto my-6 w-full max-w-[820px] rounded-sm bg-white shadow-md ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
-      <EditorContent editor={editor} />
+    <div className="mx-auto my-6 flex w-full max-w-[820px] flex-1 flex-col rounded-sm bg-white shadow-md ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
+      <EditorContent editor={editor} className="flex flex-1 flex-col" />
     </div>
   );
 }

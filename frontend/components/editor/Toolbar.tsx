@@ -67,31 +67,39 @@ function Divider() {
 export function Toolbar({ editor }: { editor: Editor }) {
   // Subscribe to only the flags the toolbar renders — avoids re-rendering
   // on every transaction (plan/07 §Performance).
+  // The snapshot editor is null during SSR/hydration and destroyed for one
+  // render when the editor instance is recreated (e.g. Strict Mode remount) —
+  // a destroyed editor keeps isActive() but nulls out can().
   const s = useEditorState({
     editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive("bold"),
-      italic: e.isActive("italic"),
-      underline: e.isActive("underline"),
-      strike: e.isActive("strike"),
-      code: e.isActive("code"),
-      h1: e.isActive("heading", { level: 1 }),
-      h2: e.isActive("heading", { level: 2 }),
-      h3: e.isActive("heading", { level: 3 }),
-      bulletList: e.isActive("bulletList"),
-      orderedList: e.isActive("orderedList"),
-      taskList: e.isActive("taskList"),
-      blockquote: e.isActive("blockquote"),
-      codeBlock: e.isActive("codeBlock"),
-      link: e.isActive("link"),
-      alignLeft: e.isActive({ textAlign: "left" }),
-      alignCenter: e.isActive({ textAlign: "center" }),
-      alignRight: e.isActive({ textAlign: "right" }),
-      highlight: e.isActive("highlight"),
-      canUndo: e.can().undo(),
-      canRedo: e.can().redo(),
-    }),
+    selector: ({ editor: e }) => {
+      if (!e || e.isDestroyed) return null;
+      return {
+        bold: e.isActive("bold"),
+        italic: e.isActive("italic"),
+        underline: e.isActive("underline"),
+        strike: e.isActive("strike"),
+        code: e.isActive("code"),
+        h1: e.isActive("heading", { level: 1 }),
+        h2: e.isActive("heading", { level: 2 }),
+        h3: e.isActive("heading", { level: 3 }),
+        bulletList: e.isActive("bulletList"),
+        orderedList: e.isActive("orderedList"),
+        taskList: e.isActive("taskList"),
+        blockquote: e.isActive("blockquote"),
+        codeBlock: e.isActive("codeBlock"),
+        link: e.isActive("link"),
+        alignLeft: e.isActive({ textAlign: "left" }),
+        alignCenter: e.isActive({ textAlign: "center" }),
+        alignRight: e.isActive({ textAlign: "right" }),
+        highlight: e.isActive("highlight"),
+        canUndo: e.can().undo(),
+        canRedo: e.can().redo(),
+      };
+    },
   });
+
+  if (!s) return null;
 
   const chain = () => editor.chain().focus();
 
