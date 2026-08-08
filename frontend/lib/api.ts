@@ -40,12 +40,20 @@ export interface DocumentDetails {
   memberCount: number;
 }
 
+export interface VersionContributor {
+  id: string;
+  name: string | null;
+  image: string | null;
+}
+
 export interface VersionMeta {
   id: string;
   label: string | null;
   isAuto: boolean;
   createdAt: string;
   createdBy: { name: string | null; image: string | null } | null;
+  /** Everyone who edited within this version's window (audit trail). */
+  contributors: VersionContributor[];
 }
 
 async function json<T>(path: string, init?: RequestInit): Promise<T | null> {

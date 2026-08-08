@@ -22,12 +22,13 @@ model User {
   image         String?
   createdAt     DateTime  @default(now()) @map("created_at")
 
-  accounts       Account[]
-  memberships    DocumentMember[]
-  ownedDocuments Document[]       @relation("owner")
-  updates        DocUpdate[]
-  versions       DocumentVersion[]
-  comments       Comment[]
+  accounts             Account[]
+  memberships          DocumentMember[]
+  ownedDocuments       Document[]       @relation("owner")
+  updates              DocUpdate[]
+  versions             DocumentVersion[]
+  versionContributions DocumentVersionContributor[]
+  comments             Comment[]
 
   @@map("users")
 }
@@ -168,12 +169,31 @@ model DocumentVersion {
   createdBy  String?  @map("created_by") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at")
   isAuto     Boolean  @default(false) @map("is_auto")
+  // Highest doc_updates.seq folded into this snapshot — anchors the
+  // contributor window of the NEXT version (audit trail). 0 = unknown
+  // (rows predating the audit-trail migration).
+  upToSeq    BigInt   @default(0) @map("up_to_seq")
 
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  author   User?    @relation(fields: [createdBy], references: [id])
+  document     Document                     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author       User?                        @relation(fields: [createdBy], references: [id])
+  contributors DocumentVersionContributor[]
 
   @@index([documentId, createdAt(sort: Desc)])
   @@map("document_versions")
+}
+
+// Who edited within a version's window (authors of doc_updates between the
+// previous version's up_to_seq and this one's). Captured at snapshot time so
+// attribution survives doc_updates pruning after compaction.
+model DocumentVersionContributor {
+  versionId String @map("version_id") @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+
+  version DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([versionId, userId])
+  @@map("document_version_contributors")
 }
 
 // Idempotency ledger for sync batches (plan/13). Replays re-ack, never

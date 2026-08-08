@@ -3,7 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FileText, History, BookmarkPlus, LogIn, Lock, FilePlus2, Check } from "lucide-react";
+import {
+  FileText,
+  History,
+  BookmarkPlus,
+  LogIn,
+  Lock,
+  FilePlus2,
+  Check,
+  PanelTop,
+  PanelBottom,
+  Hash,
+} from "lucide-react";
+import type { Editor as TiptapEditor } from "@tiptap/react";
 import { openDocument, extractPreviewText } from "@/lib/crdt/doc-manager";
 import { upsertLocalDoc, getLocalDoc, deleteLocalDoc } from "@/lib/local/meta-store";
 import { clearDocument as clearOutbox } from "@/lib/sync/outbox";
@@ -15,7 +27,17 @@ import { ConnectionBadge, type ConnectionState } from "@/components/ConnectionBa
 import { AuthorCredit } from "@/components/SiteFooter";
 import { useInkwellEditor, EditorSurface, type CollabContext } from "./Editor";
 import type { PageInfo } from "./pagination";
-import { PAGE_GAP } from "./pagination-core";
+import { PAGE_GAP, type HfBandConfig } from "./pagination-core";
+import type { HfKind } from "@/lib/constants";
+import {
+  useHfSettings,
+  enabledFor,
+  hfHeightsEqual,
+  ZERO_HF_HEIGHTS,
+  type HfHeights,
+} from "./hf";
+import { HeaderFooterLayer, type HfActive } from "./HeaderFooterLayer";
+import { HfFormatDialog } from "./HfFormatDialog";
 import {
   HorizontalRuler,
   VerticalRuler,
@@ -263,8 +285,85 @@ export function DocumentShell({ docId }: { docId: string }) {
     Math.max(1, Math.floor((scrollTop + viewportH / 2 - 24) / stride) + 1),
   );
 
-  // ---- File/View menus (Docs-style menu bar under the title) --------------
-  const [menu, setMenu] = useState<"file" | "view" | null>(null);
+  // ---- headers & footers (plan/16) ---------------------------------------
+  const hf = useHfSettings(open.meta, open.ydoc);
+  /** The band being edited; while set, the toolbar targets the segment editor. */
+  const [hfActive, setHfActive] = useState<HfActive | null>(null);
+  const [hfEditor, setHfEditor] = useState<TiptapEditor | null>(null);
+  const [hfHeights, setHfHeights] = useState<HfHeights>(ZERO_HF_HEIGHTS);
+  const [hfFormatOpen, setHfFormatOpen] = useState(false);
+  /** Insert > Page numbers waits for the segment editor to mount. */
+  const hfPendingPageNumber = useRef(false);
+
+  const handleHfHeights = useCallback((next: HfHeights) => {
+    setHfHeights((prev) => (hfHeightsEqual(prev, next) ? prev : next));
+  }, []);
+
+  const bands: HfBandConfig = useMemo(
+    () => ({
+      headerMargin: hf.settings.headerMargin,
+      footerMargin: hf.settings.footerMargin,
+      diffFirstPage: hf.settings.diffFirstPage,
+      diffOddEven: hf.settings.diffOddEven,
+      headerHeights: hfHeights.header,
+      footerHeights: hfHeights.footer,
+    }),
+    [hf.settings, hfHeights],
+  );
+
+  const handleHfActivate = useCallback(
+    (a: HfActive) => {
+      if (!editable) return;
+      if (!enabledFor(hf.settings, a.kind)) hf.enable(a.kind);
+      setHfActive(a);
+    },
+    [editable, hf],
+  );
+
+  const handleHfDeactivate = useCallback(
+    (refocusBody: boolean) => {
+      setHfActive(null);
+      if (refocusBody && editor && !editor.isDestroyed) editor.commands.focus();
+    },
+    [editor],
+  );
+
+  // A role downgrade or a collaborator removing the segment suspends the
+  // editing session (derived, not an effect — no cascading renders).
+  const activeBand = hfActive && editable && enabledFor(hf.settings, hfActive.kind) ? hfActive : null;
+
+  // Clicking back into the body ends header/footer editing (Docs behavior).
+  useEffect(() => {
+    if (!activeBand || !editor || editor.isDestroyed) return;
+    const dom = editor.view.dom;
+    const onDown = () => setHfActive(null);
+    dom.addEventListener("mousedown", onDown);
+    return () => dom.removeEventListener("mousedown", onDown);
+  }, [activeBand, editor]);
+
+  /** Insert menu: open (creating if needed) the header/footer of the page in view. */
+  const activateHf = useCallback(
+    (kind: HfKind) => {
+      handleHfActivate({ kind, page: viewportPage - 1 });
+    },
+    [handleHfActivate, viewportPage],
+  );
+
+  // Docs' "Insert > Page numbers" preset: a right-aligned page number in
+  // the chosen segment, inserted once its editor mounts.
+  useEffect(() => {
+    if (!hfPendingPageNumber.current || !hfEditor || hfEditor.isDestroyed) return;
+    hfPendingPageNumber.current = false;
+    hfEditor
+      .chain()
+      .focus("end")
+      .setTextAlign("right")
+      .insertContent({ type: "pageNumber" })
+      .run();
+  }, [hfEditor]);
+
+  // ---- File/View/Insert menus (Docs-style menu bar under the title) -------
+  const [menu, setMenu] = useState<"file" | "view" | "insert" | null>(null);
   const menusRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menu) return;
@@ -480,6 +579,82 @@ export function DocumentShell({ docId }: { docId: string }) {
                   </div>
                 )}
               </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={menu === "insert"}
+                  onClick={() => setMenu(menu === "insert" ? null : "insert")}
+                  className={cnMenuButton(menu === "insert")}
+                >
+                  Insert
+                </button>
+                {menu === "insert" && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full z-30 mt-1 w-56 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!editable}
+                      onClick={() => {
+                        setMenu(null);
+                        activateHf("header");
+                      }}
+                      className={MENU_ITEM}
+                    >
+                      <PanelTop className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                      Header
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!editable}
+                      onClick={() => {
+                        setMenu(null);
+                        activateHf("footer");
+                      }}
+                      className={MENU_ITEM}
+                    >
+                      <PanelBottom className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                      Footer
+                    </button>
+                    <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
+                    <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                      Page numbers
+                    </p>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!editable}
+                      onClick={() => {
+                        setMenu(null);
+                        activateHf("header");
+                        hfPendingPageNumber.current = true;
+                      }}
+                      className={MENU_ITEM}
+                    >
+                      <Hash className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                      In header
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!editable}
+                      onClick={() => {
+                        setMenu(null);
+                        activateHf("footer");
+                        hfPendingPageNumber.current = true;
+                      }}
+                      className={MENU_ITEM}
+                    >
+                      <Hash className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                      In footer
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2.5">
@@ -546,7 +721,9 @@ export function DocumentShell({ docId }: { docId: string }) {
 
       {editor && editable && access === "ok" && (
         <div className="print:hidden">
-          <Toolbar editor={editor} />
+          {/* While a header/footer band is being edited, the toolbar
+              formats that segment (plan/16 §4.2). */}
+          <Toolbar editor={activeBand && hfEditor && !hfEditor.isDestroyed ? hfEditor : editor} />
         </div>
       )}
 
@@ -609,6 +786,29 @@ export function DocumentShell({ docId }: { docId: string }) {
               margins={margins}
               pageSize={pageSize}
               onPageInfo={handlePageInfo}
+              bands={bands}
+              hfLayer={
+                <HeaderFooterLayer
+                  ydoc={open.ydoc}
+                  settings={hf.settings}
+                  bands={bands}
+                  pages={pageInfo.pages}
+                  pageHeight={PAGE_SIZES[pageSize].height}
+                  margins={margins}
+                  editable={editable}
+                  active={activeBand}
+                  onActivate={handleHfActivate}
+                  onDeactivate={handleHfDeactivate}
+                  onEditorReady={setHfEditor}
+                  onHeights={handleHfHeights}
+                  onOpenFormat={() => setHfFormatOpen(true)}
+                  onRemove={(kind) => {
+                    hf.remove(kind);
+                    setHfActive(null);
+                  }}
+                  onToggleDiffFirst={(on) => hf.setOptions({ diffFirstPage: on })}
+                />
+              }
             />
           ) : (
             <div
@@ -632,6 +832,12 @@ export function DocumentShell({ docId }: { docId: string }) {
       </div>
 
       <ShareDialog docId={docId} open={shareOpen} onClose={() => setShareOpen(false)} />
+      <HfFormatDialog
+        open={hfFormatOpen}
+        settings={hf.settings}
+        onClose={() => setHfFormatOpen(false)}
+        onApply={(options) => hf.setOptions(options)}
+      />
       <SaveVersionDialog
         open={versionDialogOpen}
         onClose={() => setVersionDialogOpen(false)}

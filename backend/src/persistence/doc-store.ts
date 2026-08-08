@@ -1,10 +1,7 @@
 import * as Y from "yjs";
 import { prisma, withUserContext } from "../db.js";
-import {
-  AUTOSNAPSHOT_EVERY_UPDATES,
-  AUTOSNAPSHOT_MIN_INTERVAL_MS,
-  COMPACT_AFTER_UPDATES,
-} from "@shared/constants";
+import { COMPACT_AFTER_UPDATES } from "@shared/constants";
+import { planAutoSnapshot, type SnapshotReason } from "./snapshot-policy.js";
 
 /**
  * Durable document state (plan/02, plan/11): an append-only Yjs update
@@ -86,14 +83,41 @@ export async function findBatch(documentId: string, batchId: string): Promise<bi
   return row?.ackedSeq ?? null;
 }
 
+/** Most recent version of any kind — anchor for the next contributor window. */
+export async function latestVersion(documentId: string) {
+  return prisma.documentVersion.findFirst({
+    where: { documentId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, isAuto: true, label: true, createdAt: true, upToSeq: true },
+  });
+}
+
 /**
- * Maintenance pass, called opportunistically after appends (fire-and-
- * forget; failures only delay the next pass):
- *  - auto version snapshot every N updates / min interval (plan/05)
+ * Distinct authors of doc_updates past `baseSeq` — the contributors of a
+ * version cut now. Every row here passed the users FK on insert, so the
+ * ids are always attributable.
+ */
+export async function contributorsSince(documentId: string, baseSeq: bigint): Promise<string[]> {
+  const rows = await prisma.docUpdate.findMany({
+    where: { documentId, seq: { gt: baseSeq }, authorId: { not: null } },
+    distinct: ["authorId"],
+    select: { authorId: true },
+  });
+  return rows.flatMap((r) => (r.authorId ? [r.authorId] : []));
+}
+
+/**
+ * Maintenance pass, called opportunistically after appends and on session
+ * boundaries (fire-and-forget; failures only delay the next pass):
+ *  - auto version snapshot per snapshot-policy.ts (audit trail, plan/05)
  *  - fold the update tail into doc_compactions past a threshold (plan/11)
  * Runs under the document owner's context (system-on-behalf-of-owner).
  */
-export async function runMaintenance(documentId: string, currentState: Uint8Array): Promise<void> {
+export async function runMaintenance(
+  documentId: string,
+  currentState: Uint8Array,
+  reason: SnapshotReason = "interval",
+): Promise<void> {
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
     select: { ownerId: true, latestSeq: true },
@@ -110,28 +134,56 @@ export async function runMaintenance(documentId: string, currentState: Uint8Arra
       update: { stateBytes: Buffer.from(currentState), upToSeq: doc.latestSeq, compactedAt: new Date() },
     });
     // Grace window: folded rows are pruned by a scheduled job, not here
-    // (plan/11 §doc_updates growth).
+    // (plan/11 §doc_updates growth). Contributor attribution is captured
+    // on the version rows below BEFORE pruning can touch the log.
   }
 
-  const lastAuto = await prisma.documentVersion.findFirst({
-    where: { documentId, isAuto: true },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  });
-  const updatesSinceSnapshotOk = doc.latestSeq % BigInt(AUTOSNAPSHOT_EVERY_UPDATES) === 0n;
-  const intervalOk =
-    !lastAuto || Date.now() - lastAuto.createdAt.getTime() >= AUTOSNAPSHOT_MIN_INTERVAL_MS;
+  const last = await latestVersion(documentId);
+  const plan = planAutoSnapshot({ reason, latestSeq: doc.latestSeq, last, now: Date.now() });
+  if (plan.action === "skip") return;
 
-  if (updatesSinceSnapshotOk && intervalOk) {
-    await withUserContext(doc.ownerId, (tx) =>
-      tx.documentVersion.create({
+  const authors = await contributorsSince(documentId, last?.upToSeq ?? 0n);
+
+  if (plan.action === "merge" && last) {
+    // Fold this burst into the still-fresh session snapshot: a NEW row
+    // (version blobs stay immutable for HTTP caches) keeping the original
+    // createdAt anchor, covering up to the current seq, crediting the
+    // union of both bursts' authors.
+    const prev = await prisma.documentVersionContributor.findMany({
+      where: { versionId: last.id },
+      select: { userId: true },
+    });
+    const union = [...new Set([...prev.map((c) => c.userId), ...authors])];
+    await withUserContext(doc.ownerId, async (tx) => {
+      // deleteMany: a concurrent pass may have merged first — losing the
+      // race must not throw, just add a version covering the same span.
+      await tx.documentVersion.deleteMany({ where: { id: last.id, isAuto: true } });
+      await tx.documentVersion.create({
         data: {
           documentId,
           stateBytes: Buffer.from(currentState),
           isAuto: true,
-          createdBy: doc.ownerId,
+          createdAt: last.createdAt,
+          upToSeq: doc.latestSeq,
+          contributors: { create: union.map((userId) => ({ userId })) },
         },
-      }),
-    );
+      });
+    });
+    return;
   }
+
+  // No createdBy: an auto snapshot has no single creator — the
+  // contributor rows are the attribution (this is what fixes "User 2's
+  // edits show up as the owner's").
+  await withUserContext(doc.ownerId, (tx) =>
+    tx.documentVersion.create({
+      data: {
+        documentId,
+        stateBytes: Buffer.from(currentState),
+        isAuto: true,
+        upToSeq: doc.latestSeq,
+        contributors: { create: authors.map((userId) => ({ userId })) },
+      },
+    }),
+  );
 }

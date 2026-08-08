@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   paginate,
   breaksEqual,
+  pageInsets,
+  resolveHfRole,
   type BlockBox,
+  type HfBandConfig,
   type PageGeometry,
 } from "../components/editor/pagination-core";
 
@@ -70,6 +73,11 @@ function build(specs: Spec[], containerTop: number): BlockBox[] {
 function layout(specs: Spec[]): BlockBox[] {
   posCounter = 0;
   return build(specs, GEO.marginTop);
+}
+
+/** For band tests that lay content out from a custom (inset) top. */
+function posCounterReset() {
+  posCounter = 0;
 }
 
 describe("paginate", () => {
@@ -229,6 +237,143 @@ describe("paginate", () => {
       breaks: [],
       pageCount: 1,
     });
+  });
+});
+
+/** Band config with sensible defaults; heights default to zero. */
+function bands(partial: Partial<HfBandConfig>): HfBandConfig {
+  return {
+    headerMargin: 40,
+    footerMargin: 40,
+    headerHeights: { default: 0, first: 0, even: 0 },
+    footerHeights: { default: 0, first: 0, even: 0 },
+    diffFirstPage: false,
+    diffOddEven: false,
+    ...partial,
+  };
+}
+
+describe("resolveHfRole", () => {
+  it("uses default everywhere when no variants are enabled", () => {
+    const flags = { diffFirstPage: false, diffOddEven: false };
+    expect([0, 1, 2, 3].map((p) => resolveHfRole(p, flags))).toEqual([
+      "default",
+      "default",
+      "default",
+      "default",
+    ]);
+  });
+
+  it("gives page 1 the first-page segment when enabled", () => {
+    const flags = { diffFirstPage: true, diffOddEven: false };
+    expect(resolveHfRole(0, flags)).toBe("first");
+    expect(resolveHfRole(1, flags)).toBe("default");
+  });
+
+  it("gives even-numbered pages the even segment when enabled", () => {
+    const flags = { diffFirstPage: false, diffOddEven: true };
+    // Page numbers are 1-based: index 1 = page 2 (even), index 2 = page 3 (odd).
+    expect([0, 1, 2, 3].map((p) => resolveHfRole(p, flags))).toEqual([
+      "default",
+      "even",
+      "default",
+      "even",
+    ]);
+  });
+
+  it("first-page beats odd/even on page 1", () => {
+    const flags = { diffFirstPage: true, diffOddEven: true };
+    expect([0, 1, 2].map((p) => resolveHfRole(p, flags))).toEqual(["first", "even", "default"]);
+  });
+});
+
+describe("pageInsets", () => {
+  it("returns the plain margins without bands", () => {
+    expect(pageInsets(GEO, 0)).toEqual({ top: 100, bottom: 100 });
+  });
+
+  it("returns the plain margins for zero-height (disabled/empty) bands", () => {
+    expect(pageInsets({ ...GEO, bands: bands({}) }, 0)).toEqual({ top: 100, bottom: 100 });
+  });
+
+  it("keeps the margin while the band still fits inside it", () => {
+    // 40 (band margin) + 40 (content) + 8 (gap) = 88 < 100 margin.
+    const geo = { ...GEO, bands: bands({ headerHeights: { default: 40, first: 0, even: 0 } }) };
+    expect(pageInsets(geo, 0).top).toBe(100);
+  });
+
+  it("grows the inset when the band outgrows the margin", () => {
+    // 40 + 100 + 8 = 148 > 100 margin; footer symmetric.
+    const geo = {
+      ...GEO,
+      bands: bands({
+        headerHeights: { default: 100, first: 0, even: 0 },
+        footerHeights: { default: 100, first: 0, even: 0 },
+      }),
+    };
+    expect(pageInsets(geo, 0)).toEqual({ top: 148, bottom: 148 });
+  });
+
+  it("clamps a pathological band to 40% of the page", () => {
+    const geo = { ...GEO, bands: bands({ headerHeights: { default: 900, first: 0, even: 0 } }) };
+    expect(pageInsets(geo, 0).top).toBe(400); // 0.4 × 1000
+  });
+
+  it("resolves per-page variants", () => {
+    const geo = {
+      ...GEO,
+      bands: bands({
+        diffFirstPage: true,
+        headerHeights: { default: 0, first: 200, even: 0 },
+      }),
+    };
+    expect(pageInsets(geo, 0).top).toBe(248); // 40 + 200 + 8
+    expect(pageInsets(geo, 1).top).toBe(100); // default role, no content
+  });
+});
+
+describe("paginate with header/footer bands", () => {
+  it("a header band that outgrows the margin moves breaks up", () => {
+    // Inset 148 on every page: 40 lines of 20px start at 148 (bottom 948),
+    // limit(0) = 900 → line 37 (bottom 908) is the first to cross; it
+    // lands at contentTop(1) = 1020 + 148 = 1168.
+    const geo = { ...GEO, bands: bands({ headerHeights: { default: 100, first: 100, even: 100 } }) };
+    posCounterReset();
+    const blocks = build([{ h: 800, lineH: 20 }], 148);
+    const plan = paginate(blocks, geo);
+    expect(plan.pageCount).toBe(2);
+    expect(plan.breaks).toEqual([{ pos: 100 + 1 + 37, height: 1168 - 888, kind: "line" }]);
+  });
+
+  it("a first-page-only header shrinks only page 1", () => {
+    // Page 1 inset 248, page 2+ back to the plain 100 margin: the split
+    // line targets contentTop(1) = 1020 + 100 = 1120, not 1268.
+    const geo = {
+      ...GEO,
+      bands: bands({ diffFirstPage: true, headerHeights: { default: 0, first: 200, even: 0 } }),
+    };
+    posCounterReset();
+    const blocks = build([{ h: 800, lineH: 20 }], 248);
+    const plan = paginate(blocks, geo);
+    expect(plan.pageCount).toBe(2);
+    // Boundary 900: first line with bottom > 900 is index 32 (bottom 908).
+    expect(plan.breaks).toEqual([{ pos: 100 + 1 + 32, height: 1120 - (248 + 32 * 20), kind: "line" }]);
+  });
+
+  it("a footer band raises the bottom limit", () => {
+    // Bottom inset 148 → limit(0) = 852: 40 lines from 100 split at the
+    // line crossing 852 (index 37, top 840), landing at contentTop(1) = 1120.
+    const geo = { ...GEO, bands: bands({ footerHeights: { default: 100, first: 100, even: 100 } }) };
+    const blocks = layout([{ h: 800, lineH: 20 }]);
+    const plan = paginate(blocks, geo);
+    expect(plan.pageCount).toBe(2);
+    expect(plan.breaks).toEqual([{ pos: 100 + 1 + 37, height: 1120 - 840, kind: "line" }]);
+  });
+
+  it("zero-height bands change nothing", () => {
+    const geo = { ...GEO, bands: bands({}) };
+    const blocks = layout([{ h: 2000, lineH: 20 }]);
+    expect(paginate(blocks, geo)).toEqual(paginate(layout([{ h: 2000, lineH: 20 }]), GEO));
   });
 });
 

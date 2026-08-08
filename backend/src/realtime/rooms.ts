@@ -5,7 +5,14 @@ import * as encoding from "lib0/encoding";
 import type { WebSocket } from "ws";
 import { prisma } from "../db.js";
 import { loadDocState, appendUpdate, runMaintenance } from "../persistence/doc-store.js";
-import { TITLE_MIRROR_DEBOUNCE_MS, DEFAULT_DOC_TITLE, TITLE_MAX_LENGTH } from "@shared/constants";
+import type { SnapshotReason } from "../persistence/snapshot-policy.js";
+import {
+  TITLE_MIRROR_DEBOUNCE_MS,
+  DEFAULT_DOC_TITLE,
+  TITLE_MAX_LENGTH,
+  ALL_HF_FRAGMENT_NAMES,
+  PAGE_LAYOUT_META_KEYS,
+} from "@shared/constants";
 import type { DocumentRole, WsServerControl } from "@shared/schemas/api";
 
 /**
@@ -96,9 +103,9 @@ export class Room {
   }
 
   /** Fire-and-forget compaction/auto-snapshot pass (plan/05, plan/11). */
-  maintain(): void {
+  maintain(reason: SnapshotReason = "interval"): void {
     const state = Y.encodeStateAsUpdate(this.doc);
-    void runMaintenance(this.documentId, state).catch(() => {});
+    void runMaintenance(this.documentId, state, reason).catch(() => {});
   }
 
   get isEmpty(): boolean {
@@ -130,14 +137,21 @@ export async function joinRoom(documentId: string): Promise<Room> {
  * collaborators don't see ghost cursors (plan/11 §client memory).
  */
 export function leaveRoom(room: Room, ws: WebSocket, awarenessClientIds: number[]): void {
+  const leaving = room.conns.get(ws);
   room.conns.delete(ws);
   if (awarenessClientIds.length > 0) {
     removeAwarenessStates(room.awareness, awarenessClientIds, "disconnect");
   }
   if (room.isEmpty) {
     if (rooms.get(room.documentId) === room) rooms.delete(room.documentId);
-    if (!room.closed) room.maintain(); // final snapshot/compaction opportunity
+    // Session over: cut the audit-trail snapshot (no-op if nothing changed).
+    if (!room.closed) room.maintain("session-end");
     room.destroy();
+  } else if (!room.closed && leaving && leaving.role !== "viewer") {
+    // An editor leaving while others stay open is still a session
+    // boundary — their edits become a history entry now, not whenever the
+    // room finally drains (snapshot-policy skips if they didn't edit).
+    room.maintain("session-end");
   }
 }
 
@@ -228,17 +242,33 @@ export async function applyRestore(
   const before = Y.encodeStateVector(liveDoc);
 
   liveDoc.transact(() => {
-    // Content: clear and re-insert from the snapshot as ordinary ops.
-    const liveFrag = liveDoc.getXmlFragment("content");
-    const snapFrag = snapshotDoc.getXmlFragment("content");
-    liveFrag.delete(0, liveFrag.length);
-    const clones = snapFrag
-      .toArray()
-      .map((node) => node.clone()) as (Y.XmlElement | Y.XmlText)[];
-    if (clones.length > 0) liveFrag.insert(0, clones);
+    // Every content segment — the body plus all header/footer fragments
+    // (plan/16): clear and re-insert from the snapshot as ordinary ops.
+    for (const name of ["content", ...ALL_HF_FRAGMENT_NAMES]) {
+      const liveFrag = liveDoc.getXmlFragment(name);
+      const snapFrag = snapshotDoc.getXmlFragment(name);
+      liveFrag.delete(0, liveFrag.length);
+      const clones = snapFrag
+        .toArray()
+        .map((node) => node.clone()) as (Y.XmlElement | Y.XmlText)[];
+      if (clones.length > 0) liveFrag.insert(0, clones);
+    }
     // Title restores too — it's document state like any other.
-    const snapTitle = snapshotDoc.getMap("meta").get("title");
-    if (typeof snapTitle === "string") liveDoc.getMap("meta").set("title", snapTitle);
+    const liveMeta = liveDoc.getMap("meta");
+    const snapMeta = snapshotDoc.getMap("meta");
+    const snapTitle = snapMeta.get("title");
+    if (typeof snapTitle === "string") liveMeta.set("title", snapTitle);
+    // Page layout (margins, paper size, header/footer settings): copy the
+    // snapshot's value, and delete keys the snapshot never set so their
+    // defaults apply again.
+    for (const key of PAGE_LAYOUT_META_KEYS) {
+      const value = snapMeta.get(key);
+      if (value === undefined) {
+        if (liveMeta.has(key)) liveMeta.delete(key);
+      } else {
+        liveMeta.set(key, value);
+      }
+    }
   }, restoreOrigin);
 
   // The restore expressed as one incremental update relative to `before`.

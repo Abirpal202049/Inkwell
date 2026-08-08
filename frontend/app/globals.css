@@ -155,6 +155,30 @@ body {
   );
 }
 
+/* --- Page headers & footers (plan/16) ------------------------------------
+   Bands are absolutely-positioned strips over each sheet in the
+   HeaderFooterLayer. Inactive bands show static mirrors of the segment;
+   the active band hosts a live Tiptap editor bound to that segment's
+   Y.XmlFragment. The .tiptap-content typography applies to both, with the
+   page padding/min-height overridden (bands size to their content). */
+
+.hf-band {
+  z-index: 10;
+}
+
+.tiptap-content.hf-band-content {
+  padding: 0;
+  min-height: 1.6em; /* an empty enabled segment still reserves one line */
+}
+
+.tiptap-content.hf-band-content > :first-child {
+  margin-top: 0;
+}
+
+.tiptap-content.hf-band-content > :last-child {
+  margin-bottom: 0;
+}
+
 .tiptap-content h1 {
   font-size: 1.875rem;
   font-weight: 700;
@@ -340,6 +364,23 @@ body {
   body {
     height: auto !important;
     background: #fff !important;
+  }
+  /* Default header/footer repeated per printed page (plan/16 §5): the
+     @page rule reserves the band insets; these fixed elements lift into
+     the reserved margin via inline negative offsets. Variant segments and
+     live page numbers need the PDF-export path (v2). */
+  .hf-print-header,
+  .hf-print-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    color: #000;
+  }
+  /* Page-number values are per-page projections the flowed print path
+     can't compute — hide the digits rather than print "1" everywhere. */
+  [data-hf-pagenum],
+  [data-hf-pagecount] {
+    visibility: hidden;
   }
   .pm-pagebreak {
     display: none !important;

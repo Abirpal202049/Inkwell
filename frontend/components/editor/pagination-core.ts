@@ -16,8 +16,32 @@
  * so it is safe under collaboration and offline sync.
  */
 
+import type { HfRole } from "../../lib/constants";
+
 export const PAGE_GAP = 24; // px between sheets (matches the my-6 canvas inset)
 export const PAGE_MARGIN_BOTTOM = 96; // fixed 1in bottom margin (globals.css padding)
+
+/** Space kept between a header/footer band and the body text (plan/16 §3.1). */
+export const HF_BODY_GAP = 8;
+/** A band (margin + content) may claim at most this fraction of the page,
+ *  so a pathological giant header can never starve the body. */
+const MAX_BAND_FRACTION = 0.4;
+
+/**
+ * Header/footer bands reserved inside the page margins (plan/16). Heights
+ * are the measured content heights per role variant; 0 = nothing to
+ * reserve (disabled or empty segment).
+ */
+export interface HfBandConfig {
+  /** Distance from the top page edge to the header text. */
+  headerMargin: number;
+  /** Distance from the bottom page edge to the footer text. */
+  footerMargin: number;
+  headerHeights: Record<HfRole, number>;
+  footerHeights: Record<HfRole, number>;
+  diffFirstPage: boolean;
+  diffOddEven: boolean;
+}
 
 export interface PageGeometry {
   /** Sheet height in px (e.g. 1123 for A4 @96dpi). */
@@ -28,6 +52,47 @@ export interface PageGeometry {
   marginTop: number;
   /** Bottom margin. */
   marginBottom: number;
+  /** Header/footer reserved bands; absent = plain margins. */
+  bands?: HfBandConfig | null;
+}
+
+/**
+ * Which header/footer variant a page shows (Docs semantics): page 1 uses
+ * the first-page segment when enabled; even-numbered pages use the even
+ * segment when enabled; everything else uses the default.
+ */
+export function resolveHfRole(
+  pageIndex: number,
+  flags: { diffFirstPage: boolean; diffOddEven: boolean },
+): HfRole {
+  if (pageIndex === 0 && flags.diffFirstPage) return "first";
+  if (flags.diffOddEven && (pageIndex + 1) % 2 === 0) return "even";
+  return "default";
+}
+
+function insetsForRole(geo: PageGeometry, role: HfRole): { top: number; bottom: number } {
+  const { marginTop, marginBottom, bands, pageHeight } = geo;
+  if (!bands) return { top: marginTop, bottom: marginBottom };
+  const cap = pageHeight * MAX_BAND_FRACTION;
+  const hH = bands.headerHeights[role];
+  const fH = bands.footerHeights[role];
+  // A band lives inside the margin; only when its content outgrows the
+  // margin does it push the body (Docs/Word behavior).
+  const top =
+    hH > 0 ? Math.max(marginTop, Math.min(bands.headerMargin + hH + HF_BODY_GAP, cap)) : marginTop;
+  const bottom =
+    fH > 0
+      ? Math.max(marginBottom, Math.min(bands.footerMargin + fH + HF_BODY_GAP, cap))
+      : marginBottom;
+  return { top, bottom };
+}
+
+/** Effective top/bottom insets of a page once its bands are reserved. */
+export function pageInsets(geo: PageGeometry, page: number): { top: number; bottom: number } {
+  return insetsForRole(
+    geo,
+    geo.bands ? resolveHfRole(page, geo.bands) : "default",
+  );
 }
 
 export interface LineBox {
@@ -73,13 +138,27 @@ export interface PaginationPlan {
 const EPS = 1;
 
 export function paginate(blocks: BlockBox[], geo: PageGeometry): PaginationPlan {
-  const { pageHeight: H, gap, marginTop: mt, marginBottom: mb } = geo;
+  const { pageHeight: H, gap } = geo;
   const stride = H + gap;
-  const usable = H - mt - mb;
-  if (!(H > 0) || !(usable > EPS)) return { breaks: [], pageCount: 1 };
+  // Pages can differ (first / even / default header-footer bands), so all
+  // geometry is per-page. Precompute the (at most three) inset variants.
+  const variants: Record<HfRole, { top: number; bottom: number }> = {
+    default: insetsForRole(geo, "default"),
+    first: insetsForRole(geo, "first"),
+    even: insetsForRole(geo, "even"),
+  };
+  const insets = (page: number) =>
+    variants[geo.bands ? resolveHfRole(page, geo.bands) : "default"];
+  const usableAt = (page: number) => {
+    const i = insets(page);
+    return H - i.top - i.bottom;
+  };
+  // Pages 0..2 cover every role variant.
+  const minUsable = Math.min(usableAt(0), usableAt(1), usableAt(2));
+  if (!(H > 0) || !(minUsable > EPS)) return { breaks: [], pageCount: 1 };
 
-  const contentTop = (page: number) => page * stride + mt;
-  const limit = (page: number) => page * stride + H - mb;
+  const contentTop = (page: number) => page * stride + insets(page).top;
+  const limit = (page: number) => page * stride + H - insets(page).bottom;
 
   const breaks: PageBreak[] = [];
   let k = 0; // current page index
@@ -109,8 +188,9 @@ export function paginate(blocks: BlockBox[], geo: PageGeometry): PaginationPlan 
       const atPageTop = liveTop <= contentTop(k) + EPS;
       const blockH = b.bottom - b.top;
 
-      // Move the whole block when it isn't already at a page top and fits.
-      if (!atPageTop && blockH <= usable + EPS) {
+      // Move the whole block when it isn't already at a page top and fits
+      // on the page it would land on.
+      if (!atPageTop && blockH <= usableAt(k + 1) + EPS) {
         pushWholeBlock(b);
         continue; // now starts at a page top and fits — loop exits
       }

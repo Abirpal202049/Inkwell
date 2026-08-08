@@ -17,11 +17,12 @@
 -- membership lookups inside policies bypass RLS — this is also what
 -- prevents infinite policy recursion on document_members.
 
-alter table documents         enable row level security;
-alter table document_members  enable row level security;
-alter table doc_updates       enable row level security;
-alter table document_versions enable row level security;
-alter table comments          enable row level security;
+alter table documents                     enable row level security;
+alter table document_members              enable row level security;
+alter table doc_updates                   enable row level security;
+alter table document_versions             enable row level security;
+alter table document_version_contributors enable row level security;
+alter table comments                      enable row level security;
 
 create or replace function app_user_id() returns uuid as $$
   select nullif(current_setting('app.user_id', true), '')::uuid;
@@ -88,7 +89,10 @@ drop policy if exists updates_insert on doc_updates;
 create policy updates_insert on doc_updates
   for insert with check (can_edit_document(document_id));
 
--- document_versions: members read; owner/editor create.
+-- document_versions: members read; owner/editor create; only the owner
+-- context deletes (the session-merge in runMaintenance, which runs
+-- system-on-behalf-of-owner, folds a fresh auto snapshot into its
+-- successor by delete + recreate).
 drop policy if exists versions_select on document_versions;
 create policy versions_select on document_versions
   for select using (is_document_member(document_id));
@@ -96,6 +100,26 @@ create policy versions_select on document_versions
 drop policy if exists versions_insert on document_versions;
 create policy versions_insert on document_versions
   for insert with check (can_edit_document(document_id));
+
+drop policy if exists versions_delete on document_versions;
+create policy versions_delete on document_versions
+  for delete using (owns_document(document_id));
+
+-- document_version_contributors: the audit-trail attribution rows. Scoped
+-- through the owning version's document. (Security definer helper below;
+-- deletes ride the ON DELETE CASCADE from document_versions, which
+-- referential integrity performs regardless of RLS.)
+create or replace function version_document_id(v_id uuid) returns uuid as $$
+  select document_id from document_versions where id = v_id;
+$$ language sql stable security definer;
+
+drop policy if exists version_contributors_select on document_version_contributors;
+create policy version_contributors_select on document_version_contributors
+  for select using (is_document_member(version_document_id(version_id)));
+
+drop policy if exists version_contributors_insert on document_version_contributors;
+create policy version_contributors_insert on document_version_contributors
+  for insert with check (can_edit_document(version_document_id(version_id)));
 
 -- comments: members read; any member (incl. viewer) may comment (plan/14 §6).
 drop policy if exists comments_select on comments;

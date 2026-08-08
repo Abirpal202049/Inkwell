@@ -7,6 +7,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import {
   paginate,
   breaksEqual,
+  pageInsets,
   type BlockBox,
   type LineBox,
   type PageBreak,
@@ -327,15 +328,21 @@ class PaginationView {
    * (globals.css) paint sheet/gap bands measured from that bottom edge,
    * so give each one its measured offset as a CSS variable. Widgets
    * ignore mutations, so this never re-enters ProseMirror.
+   *
+   * The mask CSS derives the sheet edge as var(--page-mt) + shift, and
+   * --page-mt is the FIRST page's content inset (grown by a header band),
+   * so shift is measured against that same baseline — the two cancel to
+   * `y - page * stride` for every page regardless of band variants.
    */
   private alignMasks(config: PaginationConfig) {
     const view = this.view;
     const origin = view.dom.getBoundingClientRect().top;
     const stride = config.pageHeight + config.gap;
+    const firstTop = pageInsets(config, 0).top;
     for (const el of Array.from(view.dom.querySelectorAll<HTMLElement>(".pm-pagebreak"))) {
       const y = el.getBoundingClientRect().bottom - origin;
-      const page = Math.round((y - config.marginTop) / stride);
-      const expected = page * stride + config.marginTop;
+      const page = Math.round((y - firstTop) / stride);
+      const expected = page * stride + firstTop;
       el.style.setProperty("--pb-shift", `${(y - expected).toFixed(2)}px`);
     }
   }

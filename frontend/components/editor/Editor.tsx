@@ -21,7 +21,12 @@ import {
   type PageSizeId,
 } from "./Ruler";
 import { Pagination, setPaginationConfig, type PageInfo } from "./pagination";
-import { PAGE_GAP, PAGE_MARGIN_BOTTOM } from "./pagination-core";
+import {
+  PAGE_GAP,
+  PAGE_MARGIN_BOTTOM,
+  pageInsets,
+  type HfBandConfig,
+} from "./pagination-core";
 
 /**
  * The Tiptap editor bound to the shared Y.Doc (plan/01 §Layers).
@@ -86,6 +91,8 @@ export function EditorSurface({
   margins,
   pageSize = DEFAULT_PAGE_SIZE,
   onPageInfo,
+  bands,
+  hfLayer,
 }: {
   editor: TiptapEditor | null;
   /** Page margins in px; falls back to the CSS defaults (1in) when absent. */
@@ -94,6 +101,10 @@ export function EditorSurface({
   pageSize?: PageSizeId;
   /** Live caret page / total pages, for the status bar. */
   onPageInfo?: (info: PageInfo) => void;
+  /** Header/footer band reserve for the pagination plugin (plan/16 §3). */
+  bands?: HfBandConfig | null;
+  /** The HeaderFooterLayer, rendered over the sheets when paginated. */
+  hfLayer?: React.ReactNode;
 }) {
   const size = PAGE_SIZES[pageSize];
   const [pages, setPages] = useState(1);
@@ -132,9 +143,24 @@ export function EditorSurface({
       gap: PAGE_GAP,
       marginTop,
       marginBottom,
+      bands: bands ?? null,
       onUpdate: handleUpdate,
     });
-  }, [editor, paginated, size.height, marginTop, marginBottom, handleUpdate]);
+  }, [editor, paginated, size.height, marginTop, marginBottom, bands, handleUpdate]);
+
+  // Spacers can only push content at break points — the FIRST block's top
+  // comes from CSS padding, so when page 1's header band outgrows the top
+  // margin the padding itself must grow (plan/16 §3).
+  const geo = {
+    pageHeight: size.height,
+    gap: PAGE_GAP,
+    marginTop,
+    marginBottom,
+    bands: bands ?? null,
+  };
+  const firstTop = paginated ? pageInsets(geo, 0).top : marginTop;
+  // Print reserve: default-role insets (index 2 is never first/even-special).
+  const printInsets = pageInsets(geo, 2);
 
   const stackHeight = pages * size.height + (pages - 1) * PAGE_GAP;
   const style = {
@@ -142,7 +168,7 @@ export function EditorSurface({
     "--page-h": `${size.height}px`,
     ...(paginated && { minHeight: stackHeight }),
     ...(margins && {
-      "--page-mt": `${margins.top}px`,
+      "--page-mt": `${firstTop}px`,
       "--page-mr": `${margins.right}px`,
       "--page-ml": `${margins.left}px`,
       "--page-mb": `${margins.bottom}px`,
@@ -152,8 +178,9 @@ export function EditorSurface({
   return (
     <div style={style} className="doc-sheet-stack relative mx-auto my-6 w-full">
       {/* Browser print handles real fragmentation; mirror the doc's paper
-          size and margins, and let print CSS strip the screen chrome. */}
-      <style>{`@page { size: ${size.width}px ${size.height}px; margin: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px; }`}</style>
+          size and margins (grown by any header/footer band reserve), and
+          let print CSS strip the screen chrome. */}
+      <style>{`@page { size: ${size.width}px ${size.height}px; margin: ${printInsets.top}px ${marginRight}px ${printInsets.bottom}px ${marginLeft}px; }`}</style>
       {/* Sheet underlay: content flows continuously on top; spacers from
           the pagination plugin hold it inside these page rectangles. */}
       <div aria-hidden className="print:hidden">
@@ -170,6 +197,7 @@ export function EditorSurface({
         )}
       </div>
       <EditorContent editor={editor} className="relative" />
+      {paginated && hfLayer}
     </div>
   );
 }

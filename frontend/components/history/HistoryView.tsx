@@ -12,7 +12,7 @@ import {
   getDocument,
   type VersionMeta,
 } from "@/lib/api";
-import { relativeTime, cn } from "@/lib/utils";
+import { relativeTime, presenceColor, cn } from "@/lib/utils";
 import { useInkwellEditor, EditorSurface } from "@/components/editor/Editor";
 import { RestoreVersionDialog } from "@/components/history/RestoreVersionDialog";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -22,6 +22,50 @@ import { SiteFooter } from "@/components/SiteFooter";
  * (auto + manual), read-only preview into a THROWAWAY Y.Doc — never the
  * live document — and non-destructive restore (owner/editor only).
  */
+
+/** Auto snapshots are titled by their timestamp, like Google Docs. */
+function versionTitle(v: VersionMeta): string {
+  if (v.label) return v.label;
+  return new Date(v.createdAt).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Who edited within this version's window — the audit trail line. Each
+ * contributor gets their presence color, so the dot here matches their
+ * live cursor in the editor. Older rows (pre-audit-trail) fall back to
+ * the version's creator.
+ */
+function ContributorLine({ v }: { v: VersionMeta }) {
+  const people =
+    v.contributors?.length > 0
+      ? v.contributors
+      : v.createdBy
+        ? [{ id: `creator-${v.id}`, name: v.createdBy.name, image: v.createdBy.image }]
+        : [];
+  if (people.length === 0) return null;
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+      {people.map((p) => (
+        <span
+          key={p.id}
+          className="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400"
+        >
+          <span
+            aria-hidden
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: presenceColor(p.id) }}
+          />
+          {p.name ?? "Unknown user"}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function VersionPreview({ state }: { state: Uint8Array }) {
   // Fresh throwaway doc per selected version (plan/05 step 2).
@@ -123,13 +167,13 @@ export function HistoryView({ docId }: { docId: string }) {
                 >
                   <span className="flex items-center gap-1.5 text-sm font-medium">
                     {!v.isAuto && <Bookmark className="h-3 w-3 text-blue-600" />}
-                    {v.label ?? "Auto snapshot"}
+                    {versionTitle(v)}
                   </span>
                   <span className="block text-xs text-zinc-500">
                     {relativeTime(v.createdAt)}
-                    {v.createdBy?.name ? ` · ${v.createdBy.name}` : ""}
                     {v.isAuto ? " · auto" : ""}
                   </span>
+                  <ContributorLine v={v} />
                 </button>
               </li>
             ))}

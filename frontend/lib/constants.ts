@@ -22,9 +22,15 @@ export const WS_MAX_FRAME_BYTES = 1_048_576;
 /** Semantic cap on materialized document size. */
 export const DOC_MAX_BYTES = 26_214_400;
 
-/** Auto version snapshot cadence. */
-export const AUTOSNAPSHOT_EVERY_UPDATES = 50;
+/**
+ * Auto version snapshots (audit trail): cut when an editor's session ends
+ * and at most once per MIN_INTERVAL during long live sessions. Session-end
+ * snapshots landing within MERGE_WINDOW of the previous unlabeled auto
+ * snapshot fold into it, so quick open-edit-close bursts read as one
+ * history entry (see backend snapshot-policy.ts).
+ */
 export const AUTOSNAPSHOT_MIN_INTERVAL_MS = 600_000;
+export const AUTOSNAPSHOT_MERGE_WINDOW_MS = 600_000;
 
 /** Fold doc_updates tail into doc_compactions after this many rows. */
 export const COMPACT_AFTER_UPDATES = 500;
@@ -56,6 +62,52 @@ export const DEFAULT_DOC_TITLE = "Untitled document";
 
 /** Max title length (mirrors zod schema / DB check). */
 export const TITLE_MAX_LENGTH = 300;
+
+/* --- Page headers & footers (plan/16) ------------------------------------ */
+
+/** Repeating page segments. `role` picks which variant a page shows. */
+export type HfKind = "header" | "footer";
+export type HfRole = "default" | "first" | "even";
+export const HF_KINDS: readonly HfKind[] = ["header", "footer"];
+export const HF_ROLES: readonly HfRole[] = ["default", "first", "even"];
+
+/**
+ * Role-named Y.XmlFragments holding header/footer content, alongside the
+ * body's "content" fragment (Docs stores these as separate segments too,
+ * but behind id-indirection maps; with no sections the indirection buys
+ * nothing, and fixed names mean two offline clients that both "create the
+ * header" converge onto the same CRDT type automatically).
+ */
+export const HF_FRAGMENTS: Record<HfKind, Record<HfRole, string>> = {
+  header: { default: "header-default", first: "header-first", even: "header-even" },
+  footer: { default: "footer-default", first: "footer-first", even: "footer-even" },
+};
+
+export const ALL_HF_FRAGMENT_NAMES: readonly string[] = HF_KINDS.flatMap((kind) =>
+  HF_ROLES.map((role) => HF_FRAGMENTS[kind][role]),
+);
+
+/**
+ * Y.Map('meta') keys defining page layout. Version restore copies exactly
+ * this set (backend applyRestore) — keep in sync with the readers in
+ * components/editor/Ruler.tsx and components/editor/hf.ts.
+ */
+export const PAGE_LAYOUT_META_KEYS = [
+  "marginLeft",
+  "marginRight",
+  "marginTop",
+  "marginBottom",
+  "pageSize",
+  "headerEnabled",
+  "footerEnabled",
+  "hfDiffFirstPage",
+  "hfDiffOddEven",
+  "headerMargin",
+  "footerMargin",
+] as const;
+
+/** Distance from the page edge to the header/footer text (px, 0.5in — the Docs default). */
+export const DEFAULT_HF_MARGIN = 48;
 
 /**
  * Deterministic presence palette (plan/14 §2): 8 colors, WCAG-checked
