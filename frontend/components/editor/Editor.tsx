@@ -112,6 +112,7 @@ export function EditorSurface({
   const marginTop = margins?.top ?? DEFAULT_MARGIN;
   const marginRight = margins?.right ?? DEFAULT_MARGIN;
   const marginLeft = margins?.left ?? DEFAULT_MARGIN;
+  const marginBottom = margins?.bottom ?? PAGE_MARGIN_BOTTOM;
 
   const handleUpdate = useCallback(
     (info: PageInfo) => {
@@ -130,10 +131,10 @@ export function EditorSurface({
       pageHeight: size.height,
       gap: PAGE_GAP,
       marginTop,
-      marginBottom: PAGE_MARGIN_BOTTOM,
+      marginBottom,
       onUpdate: handleUpdate,
     });
-  }, [editor, paginated, size.height, marginTop, handleUpdate]);
+  }, [editor, paginated, size.height, marginTop, marginBottom, handleUpdate]);
 
   const stackHeight = pages * size.height + (pages - 1) * PAGE_GAP;
   const style = {
@@ -144,6 +145,7 @@ export function EditorSurface({
       "--page-mt": `${margins.top}px`,
       "--page-mr": `${margins.right}px`,
       "--page-ml": `${margins.left}px`,
+      "--page-mb": `${margins.bottom}px`,
     }),
   } as React.CSSProperties;
 
@@ -151,7 +153,7 @@ export function EditorSurface({
     <div style={style} className="doc-sheet-stack relative mx-auto my-6 w-full">
       {/* Browser print handles real fragmentation; mirror the doc's paper
           size and margins, and let print CSS strip the screen chrome. */}
-      <style>{`@page { size: ${size.width}px ${size.height}px; margin: ${marginTop}px ${marginRight}px ${PAGE_MARGIN_BOTTOM}px ${marginLeft}px; }`}</style>
+      <style>{`@page { size: ${size.width}px ${size.height}px; margin: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px; }`}</style>
       {/* Sheet underlay: content flows continuously on top; spacers from
           the pagination plugin hold it inside these page rectangles. */}
       <div aria-hidden className="print:hidden">

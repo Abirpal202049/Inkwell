@@ -82,7 +82,7 @@ body {
      The editor surface overrides the variables per document, and sets
      --page-h to the paper height (e.g. A4) so an empty page still looks
      like a full sheet. */
-  padding: var(--page-mt, 96px) var(--page-mr, 96px) 96px var(--page-ml, 96px);
+  padding: var(--page-mt, 96px) var(--page-mr, 96px) var(--page-mb, 96px) var(--page-ml, 96px);
   min-height: var(--page-h, 65vh);
 }
 

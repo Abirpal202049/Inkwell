@@ -176,7 +176,15 @@ function collectBlocks(view: EditorView): BlockBox[] {
 
 // ---- plugin view: scheduling + reporting ----------------------------------
 
-const MEASURE_DEBOUNCE_MS = 120;
+/**
+ * Throttle interval. A trailing-only debounce would freeze pagination for
+ * the whole duration of a sustained change (margin drags stream config
+ * updates per pointermove; fast typing streams doc updates), leaving
+ * stale page breaks visibly wrong until the user pauses. Instead,
+ * measure at most every N ms with a guaranteed trailing run — page
+ * breaks track drags and typing at ~10 fps and always settle exactly.
+ */
+const MEASURE_INTERVAL_MS = 100;
 
 class PaginationView {
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -184,6 +192,7 @@ class PaginationView {
   private ro: ResizeObserver | null = null;
   private pageCount = 1;
   private destroyed = false;
+  private lastRun = 0;
 
   constructor(private view: EditorView) {
     if (typeof ResizeObserver !== "undefined") {
@@ -201,7 +210,11 @@ class PaginationView {
     const cur = paginationKey.getState(view.state);
     const prev = paginationKey.getState(prevState);
     if (!cur) return;
-    if (cur.config !== prev?.config || view.state.doc !== prevState.doc) {
+    if (view.state.doc !== prevState.doc) {
+      // Edits repaginate pre-paint: a keystroke at a page boundary must
+      // never render a frame where text and the sheet edges disagree.
+      this.scheduleImmediate();
+    } else if (cur.config !== prev?.config) {
       this.schedule();
     } else if (!view.state.selection.eq(prevState.selection)) {
       this.reportCaret();
@@ -215,17 +228,52 @@ class PaginationView {
     if (this.raf !== null) cancelAnimationFrame(this.raf);
   }
 
-  private schedule(delay = MEASURE_DEBOUNCE_MS) {
+  private schedule(delay?: number) {
     if (this.destroyed) return;
-    if (this.timer) clearTimeout(this.timer);
+    if (delay !== undefined) {
+      // Explicit backoff (e.g. IME composition) replaces any pending run.
+      if (this.timer) clearTimeout(this.timer);
+    } else if (this.timer) {
+      return; // a run is already pending — coalesce into it
+    }
+    const wait =
+      delay ??
+      Math.min(
+        Math.max(MEASURE_INTERVAL_MS - (performance.now() - this.lastRun), 0),
+        MEASURE_INTERVAL_MS,
+      );
     this.timer = setTimeout(() => {
-      this.raf = requestAnimationFrame(() => this.measure());
-    }, delay);
+      this.timer = null;
+      if (this.raf !== null) return;
+      this.raf = requestAnimationFrame(() => {
+        this.raf = null;
+        this.measure();
+      });
+    }, wait);
+  }
+
+  /**
+   * Coalesced pre-paint measure for document edits. rAF callbacks run
+   * before the frame that contains the edit paints, so the breaks are
+   * corrected before any stale layout becomes visible.
+   */
+  private scheduleImmediate() {
+    if (this.destroyed) return;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.raf !== null) return;
+    this.raf = requestAnimationFrame(() => {
+      this.raf = null;
+      this.measure();
+    });
   }
 
   private measure() {
     const view = this.view;
     if (this.destroyed || view.isDestroyed) return;
+    this.lastRun = performance.now();
     // Dispatching decoration updates mid-composition breaks IME input.
     if (view.composing) {
       this.schedule(250);

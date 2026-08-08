@@ -28,6 +28,7 @@ import { TitleInput } from "./TitleInput";
 import { StatusFooter } from "./StatusFooter";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { ShareDialog } from "./ShareDialog";
+import { SaveVersionDialog } from "./SaveVersionDialog";
 
 /**
  * Client orchestrator for the editor page (plan/07 §Component
@@ -228,10 +229,10 @@ export function DocumentShell({ docId }: { docId: string }) {
 
   // ---- save version -------------------------------------------------------
   const [savingVersion, setSavingVersion] = useState<"idle" | "saving" | "saved">("idle");
-  const saveVersion = async () => {
-    const label = window.prompt("Version label (optional):") ?? undefined;
+  const [versionDialogOpen, setVersionDialogOpen] = useState(false);
+  const saveVersion = async (label?: string) => {
     setSavingVersion("saving");
-    const result = await createVersion(docId, label?.trim() || undefined);
+    const result = await createVersion(docId, label);
     setSavingVersion(result ? "saved" : "idle");
     setTimeout(() => setSavingVersion("idle"), 1500);
   };
@@ -409,7 +410,7 @@ export function DocumentShell({ docId }: { docId: string }) {
                         disabled={savingVersion !== "idle"}
                         onClick={() => {
                           setMenu(null);
-                          void saveVersion();
+                          setVersionDialogOpen(true);
                         }}
                         className={MENU_ITEM}
                       >
@@ -481,7 +482,7 @@ export function DocumentShell({ docId }: { docId: string }) {
             {session && editable && (
               <button
                 type="button"
-                onClick={() => void saveVersion()}
+                onClick={() => setVersionDialogOpen(true)}
                 disabled={savingVersion !== "idle"}
                 title="Save a named version"
                 aria-label="Save version"
@@ -569,8 +570,9 @@ export function DocumentShell({ docId }: { docId: string }) {
 
       <main className="flex min-h-0 flex-1 print:block">
         {/* Left leg of the inverted-L: full-height ruler column pinned to
-            the extreme left, outside the scroll area. pageTop = the
-            page's my-6 (24px). */}
+            the extreme left, outside the scroll area. The ruler tracks the
+            page currently in view (same page the footer reports): its top
+            sits at the stack's my-6 inset plus that page's offset. */}
         {loaded && access === "ok" && (
           <div className="w-6 shrink-0 max-lg:hidden print:hidden">
             <VerticalRuler
@@ -578,7 +580,7 @@ export function DocumentShell({ docId }: { docId: string }) {
               editable={editable}
               onPreview={preview}
               onCommit={commit}
-              pageTop={24}
+              pageTop={24 + (viewportPage - 1) * stride}
               scrollTop={scrollTop}
               pageHeight={PAGE_SIZES[pageSize].height}
             />
@@ -625,6 +627,11 @@ export function DocumentShell({ docId }: { docId: string }) {
       </div>
 
       <ShareDialog docId={docId} open={shareOpen} onClose={() => setShareOpen(false)} />
+      <SaveVersionDialog
+        open={versionDialogOpen}
+        onClose={() => setVersionDialogOpen(false)}
+        onSave={(label) => void saveVersion(label)}
+      />
     </div>
   );
 }

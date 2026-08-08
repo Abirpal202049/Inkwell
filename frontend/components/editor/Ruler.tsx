@@ -19,6 +19,7 @@ export interface PageMargins {
   left: number;
   right: number;
   top: number;
+  bottom: number;
 }
 
 /** Paper sizes at CSS 96dpi. */
@@ -54,6 +55,7 @@ function readMargins(meta: Y.Map<unknown>): PageMargins {
     left: num("marginLeft", MARGIN_MAX_SIDE),
     right: num("marginRight", MARGIN_MAX_SIDE),
     top: num("marginTop", MARGIN_MAX_TOP),
+    bottom: num("marginBottom", MARGIN_MAX_TOP),
   };
 }
 
@@ -97,6 +99,7 @@ export function useDocMargins(meta: Y.Map<unknown>, ydoc: Y.Doc) {
         meta.set("marginLeft", next.left);
         meta.set("marginRight", next.right);
         meta.set("marginTop", next.top);
+        meta.set("marginBottom", next.bottom);
       }, localOrigin);
     },
     [meta, ydoc],
@@ -317,6 +320,21 @@ export function VerticalRuler({
     );
   };
 
+  const dragBottom = (e: React.PointerEvent) => {
+    if (!editable || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const base = { ...margins };
+    startDrag(
+      e,
+      (ev) => ({
+        ...base,
+        bottom: clamp(pageY + pageHeight - (ev.clientY - rect.top), MARGIN_MIN, MARGIN_MAX_TOP),
+      }),
+      onPreview,
+      onCommit,
+    );
+  };
+
   const marks: React.ReactNode[] = [];
   for (
     let rel = -Math.floor(margins.top / HALF_INCH) * HALF_INCH;
@@ -357,6 +375,10 @@ export function VerticalRuler({
         className="absolute inset-x-0 bg-[#e9eef6] dark:bg-zinc-800"
         style={{ top: pageY, height: margins.top }}
       />
+      <div
+        className="absolute inset-x-0 bg-[#e9eef6] dark:bg-zinc-800"
+        style={{ top: pageY + pageHeight - margins.bottom, height: margins.bottom }}
+      />
       {marks}
       <div
         title={editable ? "Drag to adjust the top margin" : undefined}
@@ -366,6 +388,17 @@ export function VerticalRuler({
           editable && "cursor-row-resize",
         )}
         style={{ top: pageY + margins.top }}
+      >
+        <StopRight />
+      </div>
+      <div
+        title={editable ? "Drag to adjust the bottom margin" : undefined}
+        onPointerDown={dragBottom}
+        className={cn(
+          "absolute inset-x-0 z-10 h-3 -translate-y-1/2 touch-none",
+          editable && "cursor-row-resize",
+        )}
+        style={{ top: pageY + pageHeight - margins.bottom }}
       >
         <StopRight />
       </div>

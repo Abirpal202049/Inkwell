@@ -70,8 +70,8 @@ export function HistoryView({ docId }: { docId: string }) {
   const canRestore = role === "owner" || role === "editor";
 
   return (
-    <div className="flex min-h-dvh flex-col bg-zinc-100 dark:bg-zinc-950">
-      <header className="flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex h-dvh flex-col overflow-hidden bg-zinc-100 dark:bg-zinc-950">
+      <header className="shrink-0 flex items-center gap-3 border-b border-zinc-200 bg-white px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
         <Link
           href={`/documents/${docId}`}
           aria-label="Back to editor"
@@ -98,7 +98,7 @@ export function HistoryView({ docId }: { docId: string }) {
 
       <div className="flex min-h-0 flex-1">
         {/* Timeline */}
-        <aside className="w-72 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <aside className="doc-scrollbar w-72 shrink-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
           {error && <p className="p-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
           {versions === null && <p className="p-2 text-sm text-zinc-500">Loading…</p>}
           {versions?.length === 0 && !error && (
@@ -136,7 +136,7 @@ export function HistoryView({ docId }: { docId: string }) {
         </aside>
 
         {/* Preview */}
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main className="doc-scrollbar min-w-0 flex-1 overflow-y-auto">
           {selected ? (
             previewState ? (
               <VersionPreview state={previewState} />
