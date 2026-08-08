@@ -16,6 +16,12 @@ export interface LocalDocMeta {
   /** Set when local edits exist that the server hasn't acked yet. */
   dirty: boolean;
   lastSyncedSeq: number;
+  /**
+   * Plain-text snippet of the document's opening lines for the dashboard
+   * thumbnail. Undefined until the document is first opened on this
+   * device; "" means the document is genuinely empty.
+   */
+  preview?: string;
 }
 
 const DB_NAME = "inkwell-db";
@@ -89,6 +95,7 @@ export async function upsertLocalDoc(
     role: patch.role ?? existing?.role ?? "owner",
     dirty: patch.dirty ?? existing?.dirty ?? false,
     lastSyncedSeq: patch.lastSyncedSeq ?? existing?.lastSyncedSeq ?? 0,
+    preview: patch.preview ?? existing?.preview,
   };
   await putLocalDoc(merged);
   return merged;
@@ -96,4 +103,19 @@ export async function upsertLocalDoc(
 
 export function deleteLocalDoc(documentId: string): Promise<undefined> {
   return tx("readwrite", (s) => s.delete(documentId) as IDBRequest<undefined>);
+}
+
+/** Wipe the meta index and the outbox in one transaction. Only the
+ *  sign-out purge (lib/local/purge.ts) should call this. */
+export function clearAllLocalStores(): Promise<void> {
+  return getDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const t = db.transaction([STORE, OUTBOX_STORE], "readwrite");
+        t.objectStore(STORE).clear();
+        t.objectStore(OUTBOX_STORE).clear();
+        t.oncomplete = () => resolve();
+        t.onerror = () => reject(t.error);
+      }),
+  );
 }

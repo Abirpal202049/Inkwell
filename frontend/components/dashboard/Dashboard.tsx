@@ -12,6 +12,7 @@ import {
 } from "@/lib/local/meta-store";
 import { clearDocument as clearOutbox } from "@/lib/sync/outbox";
 import { deleteDocumentStorage } from "@/lib/crdt/doc-manager";
+import { adoptLocalAccount } from "@/lib/local/purge";
 import { relativeTime, cn } from "@/lib/utils";
 import { DEFAULT_DOC_TITLE } from "@/lib/constants";
 import { getSession, listDocuments, deleteDocument, type SessionUser } from "@/lib/api";
@@ -38,7 +39,8 @@ function NewDocPlus({ className }: { className?: string }) {
   );
 }
 
-/** Deterministic fake text lines for the document thumbnail. */
+/** Fallback fake text lines for docs never opened on this device
+ *  (no cached preview text yet). */
 const THUMB_LINES = [
   "w-full", "w-5/6", "w-full", "w-2/3", "w-11/12", "w-3/4", "w-full", "w-5/6", "w-1/2",
 ];
@@ -55,10 +57,15 @@ export function Dashboard() {
     void getSession().then(setSession);
   }, []);
 
-  // Merge the server's list into the local cache (plan/14 §4).
+  // Merge the server's list into the local cache (plan/14 §4). If a
+  // DIFFERENT account was last active on this device (previous user's
+  // session expired without an explicit sign-out), purge their cached
+  // documents first so accounts never see each other's data.
   useEffect(() => {
     if (!session) return;
-    void listDocuments().then(async (result) => {
+    void (async () => {
+      if (await adoptLocalAccount(session.id)) setDocs(await listLocalDocs());
+      const result = await listDocuments();
       if (!result) return;
       for (const d of result.documents) {
         await upsertLocalDoc(d.id, {
@@ -68,7 +75,7 @@ export function Dashboard() {
         });
       }
       setDocs(await listLocalDocs());
-    });
+    })();
   }, [session]);
 
   const createDocument = async () => {
@@ -129,13 +136,13 @@ export function Dashboard() {
             />
           </div>
           {session === null && (
-            <a
-              href="/api/auth/signin"
+            <Link
+              href="/signin?callbackUrl=/documents"
               className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
             >
               <LogIn className="h-4 w-4" />
               Sign in
-            </a>
+            </Link>
           )}
           {session && (
             <div className="flex shrink-0 items-center gap-2">
@@ -152,14 +159,14 @@ export function Dashboard() {
                   (session.name ?? session.email).slice(0, 1).toUpperCase()
                 )}
               </span>
-              <a
-                href="/api/auth/signout"
+              <Link
+                href="/signout"
                 title="Sign out"
                 aria-label="Sign out"
                 className="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 <LogOut className="h-4 w-4" />
-              </a>
+              </Link>
             </div>
           )}
         </div>
@@ -251,14 +258,28 @@ export function Dashboard() {
                 >
                   <div
                     aria-hidden
-                    className="flex h-36 flex-col gap-1.5 overflow-hidden border-b border-zinc-100 bg-white px-4 pt-4 dark:border-zinc-800 dark:bg-zinc-900"
+                    className={cn(
+                      "h-36 overflow-hidden border-b border-zinc-100 bg-white px-4 pt-4 dark:border-zinc-800 dark:bg-zinc-900",
+                      d.preview === undefined && "flex flex-col gap-1.5",
+                    )}
                   >
-                    {THUMB_LINES.map((w, i) => (
-                      <div
-                        key={i}
-                        className={cn("h-1.5 shrink-0 rounded-full bg-zinc-100 dark:bg-zinc-800", w)}
-                      />
-                    ))}
+                    {d.preview !== undefined ? (
+                      // Mini render of the document's actual opening text,
+                      // Docs-style; an empty doc shows a blank page.
+                      <p className="whitespace-pre-wrap wrap-break-word text-[7px] leading-2.75 text-zinc-600 dark:text-zinc-400">
+                        {d.preview}
+                      </p>
+                    ) : (
+                      THUMB_LINES.map((w, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "h-1.5 shrink-0 rounded-full bg-zinc-100 dark:bg-zinc-800",
+                            w,
+                          )}
+                        />
+                      ))
+                    )}
                   </div>
                   <div className="p-3">
                     <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">

@@ -68,6 +68,13 @@ export async function getSession(): Promise<SessionUser | null> {
   return session?.user?.id ? session.user : null;
 }
 
+/** Auth.js double-submit CSRF token — required by the custom /signin and
+ *  /signout pages, whose forms POST directly to the Auth.js endpoints. */
+export async function getCsrfToken(): Promise<string | null> {
+  const body = await json<{ csrfToken?: string }>("/api/auth/csrf");
+  return body?.csrfToken ?? null;
+}
+
 export function listDocuments(): Promise<{ documents: DocumentListItem[] } | null> {
   return json("/api/documents");
 }

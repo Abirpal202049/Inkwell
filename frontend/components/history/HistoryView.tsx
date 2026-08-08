@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { relativeTime, cn } from "@/lib/utils";
 import { useInkwellEditor, EditorSurface } from "@/components/editor/Editor";
+import { RestoreVersionDialog } from "@/components/history/RestoreVersionDialog";
 import { SiteFooter } from "@/components/SiteFooter";
 
 /**
@@ -41,6 +42,7 @@ export function HistoryView({ docId }: { docId: string }) {
   const [selected, setSelected] = useState<VersionMeta | null>(null);
   const [previewState, setPreviewState] = useState<Uint8Array | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,7 +61,6 @@ export function HistoryView({ docId }: { docId: string }) {
 
   const restore = async () => {
     if (!selected) return;
-    if (!window.confirm("Restore the document to this version? The current state is kept in history.")) return;
     setRestoring(true);
     const result = await restoreVersion(docId, selected.id);
     setRestoring(false);
@@ -86,7 +87,7 @@ export function HistoryView({ docId }: { docId: string }) {
         {selected && canRestore && (
           <button
             type="button"
-            onClick={() => void restore()}
+            onClick={() => setConfirmOpen(true)}
             disabled={restoring || !previewState}
             className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
@@ -151,6 +152,13 @@ export function HistoryView({ docId }: { docId: string }) {
         </main>
       </div>
       <SiteFooter />
+
+      <RestoreVersionDialog
+        open={confirmOpen}
+        versionLabel={selected?.label ?? undefined}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => void restore()}
+      />
     </div>
   );
 }

@@ -86,5 +86,54 @@ export function deleteDocumentStorage(docId: string): Promise<void> {
   });
 }
 
+/**
+ * Delete every per-doc content database on this device (sign-out purge).
+ * `knownIds` come from the meta store; where the browser supports
+ * indexedDB.databases() we also sweep orphaned inkwell-doc-* databases
+ * whose meta row was already lost.
+ */
+export async function deleteAllDocumentStorage(knownIds: string[]): Promise<void> {
+  const ids = new Set(knownIds);
+  try {
+    for (const { name } of await indexedDB.databases()) {
+      if (name?.startsWith(IDB_PREFIX)) ids.add(name.slice(IDB_PREFIX.length));
+    }
+  } catch {
+    // databases() unsupported — knownIds still covers everything indexed.
+  }
+  await Promise.all([...ids].map(deleteDocumentStorage));
+}
+
 /** The Y.XmlFragment the editor binds to. Single fixed name per doc. */
 export const CONTENT_FRAGMENT = "content";
+
+function nodeText(node: unknown): string {
+  if (node instanceof Y.XmlText) {
+    return node
+      .toDelta()
+      .map((op: { insert?: unknown }) => (typeof op.insert === "string" ? op.insert : ""))
+      .join("");
+  }
+  if (node instanceof Y.XmlElement) {
+    return node.toArray().map(nodeText).join("");
+  }
+  return "";
+}
+
+/**
+ * Plain-text snapshot of the document's opening lines, used for the
+ * dashboard thumbnails (one string, "\n" between block nodes). Cached in
+ * the meta store so the dashboard never has to open per-doc databases.
+ */
+export function extractPreviewText(ydoc: Y.Doc, maxChars = 500): string {
+  const frag = ydoc.getXmlFragment(CONTENT_FRAGMENT);
+  const lines: string[] = [];
+  let total = 0;
+  for (const node of frag.toArray()) {
+    if (total >= maxChars) break;
+    const text = nodeText(node);
+    lines.push(text);
+    total += text.length + 1;
+  }
+  return lines.join("\n").slice(0, maxChars).trimEnd();
+}

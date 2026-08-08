@@ -17,6 +17,10 @@ export const authConfig: ExpressAuthConfig = {
   trustHost: true,
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60, updateAge: 24 * 60 * 60 },
+  // Branded frontend screens instead of the unstyled Auth.js defaults.
+  // GET /api/auth/signin|signout redirects here; errors land on /signin
+  // with ?error=<code> for the page to translate.
+  pages: { signIn: "/signin", signOut: "/signout", error: "/signin" },
   providers: [
     Google({ allowDangerousEmailAccountLinking: true }),
     GitHub({ allowDangerousEmailAccountLinking: true }),

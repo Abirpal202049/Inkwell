@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, History, BookmarkPlus, LogIn, Lock, FilePlus2, Check } from "lucide-react";
-import { openDocument } from "@/lib/crdt/doc-manager";
+import { openDocument, extractPreviewText } from "@/lib/crdt/doc-manager";
 import { upsertLocalDoc, getLocalDoc, deleteLocalDoc } from "@/lib/local/meta-store";
 import { clearDocument as clearOutbox } from "@/lib/sync/outbox";
 import { TITLE_MIRROR_DEBOUNCE_MS, DEFAULT_DOC_TITLE } from "@/lib/constants";
@@ -203,6 +203,7 @@ export function DocumentShell({ docId }: { docId: string }) {
       timer = setTimeout(() => {
         void upsertLocalDoc(docId, {
           title: (open.meta.get("title") as string) ?? undefined,
+          preview: extractPreviewText(open.ydoc),
           updatedAt: Date.now(),
           dirty: true,
         });
@@ -348,13 +349,13 @@ export function DocumentShell({ docId }: { docId: string }) {
               This document is restricted. Ask the owner to share it with you, or sign in with an
               account that has access.
             </p>
-            <a
-              href="/api/auth/signin"
+            <Link
+              href={`/signin?callbackUrl=/documents/${docId}`}
               className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
             >
               <LogIn className="h-4 w-4" />
               Sign in
-            </a>
+            </Link>
           </div>
         </main>
         <div className="flex items-center justify-center border-t border-[#dadce0] bg-[#f9fbfd] px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900">
@@ -502,13 +503,13 @@ export function DocumentShell({ docId }: { docId: string }) {
               </Link>
             )}
             {session === null && (
-              <a
-                href="/api/auth/signin"
+              <Link
+                href={`/signin?callbackUrl=/documents/${docId}`}
                 className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
               >
                 <LogIn className="h-3.5 w-3.5" />
                 Sign in to sync
-              </a>
+              </Link>
             )}
             {session && role === "owner" && (
               <button
