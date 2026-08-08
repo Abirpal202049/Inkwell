@@ -87,6 +87,23 @@ export function patchDocument(
   return json(`/api/documents/${docId}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
+/**
+ * Permanently delete a document (owner only) — the server hard-deletes
+ * the row and cascades to members, updates, versions, and comments.
+ * Returns true when the server no longer has the document: a successful
+ * delete OR a 404 (never registered / already gone), so callers can
+ * safely clean up local state. False means the delete did NOT happen
+ * (offline, or not the owner).
+ */
+export async function deleteDocument(docId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/documents/${docId}`, { method: "DELETE" });
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 export function mintToken(
   docId: string,
 ): Promise<{ token: string; wsUrl: string; expiresIn: number } | null> {

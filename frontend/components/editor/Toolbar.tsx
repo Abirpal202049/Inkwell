@@ -51,8 +51,8 @@ function ToolbarButton({ onClick, active, disabled, label, children }: ToolbarBu
       aria-pressed={active}
       title={label}
       className={cn(
-        "rounded p-1.5 text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-700",
-        active && "bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50",
+        "rounded p-1.5 text-zinc-600 hover:bg-[#d3e3fd]/60 disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-700",
+        active && "bg-[#d3e3fd] text-[#041e49] dark:bg-zinc-700 dark:text-zinc-50",
       )}
     >
       {children}
@@ -115,11 +115,12 @@ export function Toolbar({ editor }: { editor: Editor }) {
   };
 
   return (
-    <div
-      role="toolbar"
-      aria-label="Formatting"
-      className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 bg-zinc-50 px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900"
-    >
+    <div className="bg-[#f9fbfd] px-4 pb-2 pt-0.5 dark:border-b dark:border-zinc-800 dark:bg-zinc-900 dark:px-2 dark:py-1">
+      <div
+        role="toolbar"
+        aria-label="Formatting"
+        className="flex flex-wrap items-center gap-0.5 rounded-full bg-[#edf2fa] px-3 py-1 dark:rounded-none dark:bg-transparent dark:p-0"
+      >
       <ToolbarButton label="Undo (Ctrl+Z)" onClick={() => chain().undo().run()} disabled={!s.canUndo}>
         <Undo2 className="h-4 w-4" />
       </ToolbarButton>
@@ -188,6 +189,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
       <ToolbarButton label="Align right" active={s.alignRight} onClick={() => chain().setTextAlign("right").run()}>
         <AlignRight className="h-4 w-4" />
       </ToolbarButton>
+      </div>
     </div>
   );
 }

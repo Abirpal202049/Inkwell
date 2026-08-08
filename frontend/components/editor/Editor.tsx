@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { useEditor, EditorContent, type Editor as TiptapEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -12,6 +13,15 @@ import TaskItem from "@tiptap/extension-task-item";
 import type * as Y from "yjs";
 import type { SyncProvider } from "@/lib/sync/provider";
 import { CONTENT_FRAGMENT } from "@/lib/crdt/doc-manager";
+import {
+  PAGE_SIZES,
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_MARGIN,
+  type PageMargins,
+  type PageSizeId,
+} from "./Ruler";
+import { Pagination, setPaginationConfig, type PageInfo } from "./pagination";
+import { PAGE_GAP, PAGE_MARGIN_BOTTOM } from "./pagination-core";
 
 /**
  * The Tiptap editor bound to the shared Y.Doc (plan/01 §Layers).
@@ -54,11 +64,12 @@ export function useInkwellEditor(
         TaskList,
         TaskItem.configure({ nested: true }),
         Placeholder.configure({ placeholder: "Start writing…" }),
+        Pagination,
       ],
       editorProps: {
         attributes: {
           class:
-            "tiptap-content flex-1 focus:outline-none min-h-[65vh] px-12 py-10 max-sm:px-6 max-sm:py-6",
+            "tiptap-content flex-1 focus:outline-none",
           "aria-label": "Document content",
         },
       },
@@ -67,10 +78,96 @@ export function useInkwellEditor(
   );
 }
 
-export function EditorSurface({ editor }: { editor: TiptapEditor | null }) {
+const SHEET_CLASSES =
+  "absolute inset-x-0 bg-white shadow-sm ring-1 ring-[#dadce0] dark:bg-zinc-900 dark:shadow-md dark:ring-zinc-800";
+
+export function EditorSurface({
+  editor,
+  margins,
+  pageSize = DEFAULT_PAGE_SIZE,
+  onPageInfo,
+}: {
+  editor: TiptapEditor | null;
+  /** Page margins in px; falls back to the CSS defaults (1in) when absent. */
+  margins?: PageMargins;
+  /** Paper size; controls page width and height. */
+  pageSize?: PageSizeId;
+  /** Live caret page / total pages, for the status bar. */
+  onPageInfo?: (info: PageInfo) => void;
+}) {
+  const size = PAGE_SIZES[pageSize];
+  const [pages, setPages] = useState(1);
+
+  // Below the mobile breakpoint globals.css flattens the page padding, so
+  // pagination switches off there too (Docs is pageless on mobile as well).
+  const [paginated, setPaginated] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 40rem)");
+    const apply = () => setPaginated(!mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  const marginTop = margins?.top ?? DEFAULT_MARGIN;
+  const marginRight = margins?.right ?? DEFAULT_MARGIN;
+  const marginLeft = margins?.left ?? DEFAULT_MARGIN;
+
+  const handleUpdate = useCallback(
+    (info: PageInfo) => {
+      setPages(info.pages);
+      onPageInfo?.(info);
+    },
+    [onPageInfo],
+  );
+
+  // Feed geometry into the pagination plugin whenever it changes. Margin
+  // drags stream through here per pointermove; the plugin debounces.
+  useEffect(() => {
+    if (!editor) return;
+    setPaginationConfig(editor, {
+      enabled: paginated,
+      pageHeight: size.height,
+      gap: PAGE_GAP,
+      marginTop,
+      marginBottom: PAGE_MARGIN_BOTTOM,
+      onUpdate: handleUpdate,
+    });
+  }, [editor, paginated, size.height, marginTop, handleUpdate]);
+
+  const stackHeight = pages * size.height + (pages - 1) * PAGE_GAP;
+  const style = {
+    maxWidth: size.width,
+    "--page-h": `${size.height}px`,
+    ...(paginated && { minHeight: stackHeight }),
+    ...(margins && {
+      "--page-mt": `${margins.top}px`,
+      "--page-mr": `${margins.right}px`,
+      "--page-ml": `${margins.left}px`,
+    }),
+  } as React.CSSProperties;
+
   return (
-    <div className="mx-auto my-6 flex w-full max-w-[820px] flex-1 flex-col rounded-sm bg-white shadow-md ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
-      <EditorContent editor={editor} className="flex flex-1 flex-col" />
+    <div style={style} className="doc-sheet-stack relative mx-auto my-6 w-full">
+      {/* Browser print handles real fragmentation; mirror the doc's paper
+          size and margins, and let print CSS strip the screen chrome. */}
+      <style>{`@page { size: ${size.width}px ${size.height}px; margin: ${marginTop}px ${marginRight}px ${PAGE_MARGIN_BOTTOM}px ${marginLeft}px; }`}</style>
+      {/* Sheet underlay: content flows continuously on top; spacers from
+          the pagination plugin hold it inside these page rectangles. */}
+      <div aria-hidden className="print:hidden">
+        {paginated ? (
+          Array.from({ length: pages }, (_, k) => (
+            <div
+              key={k}
+              className={SHEET_CLASSES}
+              style={{ top: k * (size.height + PAGE_GAP), height: size.height }}
+            />
+          ))
+        ) : (
+          <div className={`${SHEET_CLASSES} inset-y-0`} />
+        )}
+      </div>
+      <EditorContent editor={editor} className="relative" />
     </div>
   );
 }

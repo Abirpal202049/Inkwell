@@ -13,6 +13,8 @@ interface PresentUser {
   name: string;
   color: string;
   image?: string | null;
+  /** Docs-style anonymous-animal avatar for signed-out viewers. */
+  emoji?: string | null;
 }
 
 export function PresenceAvatars({ provider }: { provider: SyncProvider | null }) {
@@ -28,14 +30,18 @@ export function PresenceAvatars({ provider }: { provider: SyncProvider | null })
       const next: PresentUser[] = [];
       for (const [clientId, state] of awareness.getStates()) {
         if (clientId === awareness.clientID) continue; // remote only
-        const user = (state as { user?: { name?: string; color?: string; image?: string | null } })
-          .user;
+        const user = (
+          state as {
+            user?: { name?: string; color?: string; image?: string | null; emoji?: string | null };
+          }
+        ).user;
         if (!user?.name) continue;
         next.push({
           clientId,
           name: user.name,
           color: user.color ?? "#71717a",
           image: user.image,
+          emoji: user.emoji,
         });
       }
       setUsers(next);
@@ -61,7 +67,14 @@ export function PresenceAvatars({ provider }: { provider: SyncProvider | null })
         >
           {u.image ? (
             // eslint-disable-next-line @next/next/no-img-element -- tiny external avatar, next/image overhead not warranted
-            <img src={u.image} alt={u.name} className="h-full w-full object-cover" />
+            <img
+              src={u.image}
+              alt={u.name}
+              referrerPolicy="no-referrer"
+              className="h-full w-full object-cover"
+            />
+          ) : u.emoji ? (
+            <span aria-hidden className="text-sm leading-none">{u.emoji}</span>
           ) : (
             u.name.slice(0, 1).toUpperCase()
           )}

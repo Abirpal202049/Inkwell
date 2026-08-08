@@ -43,11 +43,11 @@ export function ConnectionBadge({ state }: { state: ConnectionState }) {
     <div
       aria-live="polite"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
         className,
       )}
     >
-      <Icon className={cn("h-3.5 w-3.5", state === "syncing" && "animate-spin")} aria-hidden />
+      <Icon className={cn("h-3 w-3", state === "syncing" && "animate-spin")} aria-hidden />
       {label}
     </div>
   );

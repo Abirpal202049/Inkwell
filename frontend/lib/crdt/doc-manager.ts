@@ -66,5 +66,25 @@ function releaseDocument(docId: string): void {
   entry.open.ydoc.destroy();
 }
 
+/**
+ * Hard-delete a document's local content: destroy any live instance and
+ * drop its entire per-doc IndexedDB database. Resolves even when another
+ * tab still holds the DB open (deletion then completes once it closes).
+ */
+export function deleteDocumentStorage(docId: string): Promise<void> {
+  const entry = registry.get(docId);
+  if (entry) {
+    registry.delete(docId);
+    entry.open.persistence.destroy();
+    entry.open.ydoc.destroy();
+  }
+  return new Promise((resolve) => {
+    const req = indexedDB.deleteDatabase(IDB_PREFIX + docId);
+    req.onsuccess = () => resolve();
+    req.onerror = () => resolve();
+    req.onblocked = () => resolve();
+  });
+}
+
 /** The Y.XmlFragment the editor binds to. Single fixed name per doc. */
 export const CONTENT_FRAGMENT = "content";

@@ -52,6 +52,11 @@ export interface SyncProviderEvents {
   onState?: (state: SyncState) => void;
   onRole?: (role: "owner" | "editor" | "viewer") => void;
   onRevoked?: () => void;
+  /** The document was hard-deleted server-side (close code 4410). */
+  onDeleted?: () => void;
+  /** False for anonymous link-access sessions: they can't create the
+   *  remote document, so skip the (authenticated) registration call. */
+  registerRemote?: boolean;
 }
 
 export class SyncProvider {
@@ -135,8 +140,10 @@ export class SyncProvider {
     // Offline-created documents get registered server-side on first sync,
     // keeping their client-generated id (plan/13 §POST /api/documents).
     if (!this.remoteEnsured) {
-      const title = (this.doc.getMap("meta").get("title") as string) ?? DEFAULT_DOC_TITLE;
-      await createRemoteDocument(this.docId, title); // 409 (exists) is fine
+      if (this.events.registerRemote !== false) {
+        const title = (this.doc.getMap("meta").get("title") as string) ?? DEFAULT_DOC_TITLE;
+        await createRemoteDocument(this.docId, title); // 409 (exists) is fine
+      }
       this.remoteEnsured = true;
     }
 
@@ -193,6 +200,12 @@ export class SyncProvider {
         // Membership revoked: stop reconnecting, keep local data readable.
         this.setState("error");
         this.events.onRevoked?.();
+        return;
+      }
+      if (event.code === 4410) {
+        // Document hard-deleted: stop reconnecting for good.
+        this.setState("error");
+        this.events.onDeleted?.();
         return;
       }
       if (event.code === 4401) {

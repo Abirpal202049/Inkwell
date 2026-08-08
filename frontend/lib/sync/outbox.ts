@@ -65,6 +65,26 @@ export function remove(ids: number[]): Promise<void> {
   );
 }
 
+/** Drop every queued update for a document (used on hard delete). */
+export function clearDocument(documentId: string): Promise<void> {
+  return getDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(OUTBOX_STORE, "readwrite");
+        const req = tx.objectStore(OUTBOX_STORE).index("documentId").openCursor(documentId);
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }),
+  );
+}
+
 export function count(documentId: string): Promise<number> {
   return getDb().then(
     (db) =>

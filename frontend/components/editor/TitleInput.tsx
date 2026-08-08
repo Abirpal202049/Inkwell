@@ -75,7 +75,8 @@ export function TitleInput({
       }}
       aria-label="Document title"
       maxLength={TITLE_MAX_LENGTH}
-      className="w-full max-w-md truncate rounded px-2 py-1 text-lg font-medium text-zinc-900 outline-none hover:bg-zinc-100 focus:bg-white focus:ring-2 focus:ring-blue-500 dark:text-zinc-50 dark:hover:bg-zinc-800 dark:focus:bg-zinc-900"
+      size={Math.max(value.length, 4)} // width fallback where field-sizing is unsupported
+      className="field-sizing-content max-w-md truncate rounded px-2 py-0.5 text-xl text-zinc-900 outline-none hover:bg-zinc-100 focus:bg-white focus:ring-2 focus:ring-blue-500 dark:font-medium dark:text-zinc-50 dark:hover:bg-zinc-800 dark:focus:bg-zinc-900"
     />
   );
 }

@@ -6,9 +6,16 @@ import { WORD_COUNT_DEBOUNCE_MS } from "@/lib/constants";
 
 /**
  * Word/character count (plan/14 §8) — recomputed on a debounce, never per
- * keystroke. Click toggles reading-time estimate (~200 wpm).
+ * keystroke. Click toggles reading-time estimate (~200 wpm). When the
+ * pagination plugin reports page info, a Docs-style "Page X of N" leads.
  */
-export function StatusFooter({ editor }: { editor: Editor | null }) {
+export function StatusFooter({
+  editor,
+  pageInfo,
+}: {
+  editor: Editor | null;
+  pageInfo?: { page: number; pages: number };
+}) {
   const [stats, setStats] = useState({ words: 0, chars: 0 });
   const [showReadingTime, setShowReadingTime] = useState(false);
 
@@ -43,7 +50,7 @@ export function StatusFooter({ editor }: { editor: Editor | null }) {
     >
       {showReadingTime
         ? `~${readingMinutes} min read`
-        : `${stats.words} words · ${stats.chars} characters`}
+        : `${pageInfo ? `Page ${pageInfo.page} of ${pageInfo.pages} · ` : ""}${stats.words} words · ${stats.chars} characters`}
     </button>
   );
 }

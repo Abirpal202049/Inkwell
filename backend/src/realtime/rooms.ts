@@ -31,6 +31,9 @@ export class Room {
   readonly doc = new Y.Doc({ gc: true });
   readonly awareness = new Awareness(this.doc);
   readonly conns = new Map<WebSocket, ConnState>();
+  /** Set when the document was hard-deleted: skip the final maintenance
+   *  pass so nothing re-inserts rows for a document that no longer exists. */
+  closed = false;
   /** Serializes DB appends so seq order matches apply order. */
   private persistChain: Promise<unknown> = Promise.resolve();
   private titleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -132,9 +135,26 @@ export function leaveRoom(room: Room, ws: WebSocket, awarenessClientIds: number[
     removeAwarenessStates(room.awareness, awarenessClientIds, "disconnect");
   }
   if (room.isEmpty) {
-    rooms.delete(room.documentId);
-    room.maintain(); // final snapshot/compaction opportunity
+    if (rooms.get(room.documentId) === room) rooms.delete(room.documentId);
+    if (!room.closed) room.maintain(); // final snapshot/compaction opportunity
     room.destroy();
+  }
+}
+
+/**
+ * Hard-delete support: evict the room and close every live connection
+ * with 4410 so clients stop reconnecting. Called BEFORE the DB delete so
+ * no in-flight edit re-persists rows for a document that's being wiped;
+ * each socket's close handler runs leaveRoom, which (closed=true) skips
+ * the final maintenance snapshot and destroys the room when empty.
+ */
+export function closeRoomForDelete(documentId: string): void {
+  const room = rooms.get(documentId);
+  if (!room) return;
+  rooms.delete(documentId);
+  room.closed = true;
+  for (const conn of room.conns.values()) {
+    conn.ws.close(4410, "document deleted");
   }
 }
 
@@ -167,6 +187,19 @@ export function notifyRoleChange(
       conn.role = role;
       sendControl(conn.ws, { t: "role", role });
     }
+  }
+}
+
+/**
+ * Close every anonymous (link-access) connection on a document — used
+ * when the owner flips sharing back to Restricted (plan/14 §5), so
+ * incognito viewers are cut off immediately, not at their next connect.
+ */
+export function kickAnonymous(documentId: string): void {
+  const room = rooms.get(documentId);
+  if (!room) return;
+  for (const conn of room.conns.values()) {
+    if (conn.userId.startsWith("anon:")) conn.ws.close(4403, "membership revoked");
   }
 }
 

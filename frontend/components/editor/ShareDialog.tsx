@@ -112,11 +112,11 @@ export function ShareDialog({
             onChange={(e) => void setShareMode(e.target.value)}
             disabled={busy || !details}
             aria-label="Link sharing mode"
-            className="flex-1 bg-transparent text-sm outline-none"
+            className="flex-1 bg-transparent text-sm outline-none dark:bg-zinc-900 dark:text-zinc-100"
           >
-            <option value="private">Restricted — members only</option>
-            <option value="link-view">Anyone with the link can view</option>
-            <option value="link-edit">Anyone with the link can edit</option>
+            <option value="private" className="dark:bg-zinc-900">Restricted — members only</option>
+            <option value="link-view" className="dark:bg-zinc-900">Anyone with the link can view</option>
+            <option value="link-edit" className="dark:bg-zinc-900">Anyone with the link can edit</option>
           </select>
           <button
             type="button"
@@ -145,8 +145,8 @@ export function ShareDialog({
             aria-label="Role for invitee"
             className="rounded-lg border border-zinc-200 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
           >
-            <option value="editor">Editor</option>
-            <option value="viewer">Viewer</option>
+            <option value="editor" className="dark:bg-zinc-800">Editor</option>
+            <option value="viewer" className="dark:bg-zinc-800">Viewer</option>
           </select>
           <button
             type="button"
@@ -168,7 +168,12 @@ export function ShareDialog({
               <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-zinc-200 text-xs font-medium dark:bg-zinc-700">
                 {m.image ? (
                   // eslint-disable-next-line @next/next/no-img-element -- tiny external avatar
-                  <img src={m.image} alt="" className="h-full w-full object-cover" />
+                  <img
+                    src={m.image}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   (m.name ?? m.email).slice(0, 1).toUpperCase()
                 )}
@@ -194,8 +199,8 @@ export function ShareDialog({
                       "rounded border border-zinc-200 px-1.5 py-0.5 text-xs dark:border-zinc-700 dark:bg-zinc-800",
                     )}
                   >
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
+                    <option value="editor" className="dark:bg-zinc-800">Editor</option>
+                    <option value="viewer" className="dark:bg-zinc-800">Viewer</option>
                   </select>
                   <button
                     type="button"
