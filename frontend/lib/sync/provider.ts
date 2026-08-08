@@ -106,7 +106,13 @@ export class SyncProvider {
     if (origin === this || (origin && (origin as { constructor?: { name?: string } }).constructor?.name === "IndexeddbPersistence")) {
       return;
     }
-    void outbox.enqueue(this.docId, update).then(() => this.scheduleFlush());
+    void outbox.enqueue(this.docId, update).then(() => {
+      // `dirty` mirrors the outbox: set the moment an update is queued,
+      // cleared when the server ACKs the batch (handleControl). Nothing
+      // else may write it — see the mirror effect in DocumentShell.
+      void upsertLocalDoc(this.docId, { dirty: true });
+      this.scheduleFlush();
+    });
   };
 
   private onAwarenessUpdate = (
@@ -241,9 +247,12 @@ export class SyncProvider {
       const { ids, resolve, timer } = this.pendingAck;
       clearTimeout(timer);
       this.pendingAck = null;
-      void outbox.remove(ids).then(() => {
+      void outbox.remove(ids).then(async () => {
+        // More updates may have been queued while this batch was in
+        // flight — only an empty outbox means "everything synced".
+        const remaining = await outbox.count(this.docId).catch(() => 0);
         void upsertLocalDoc(this.docId, {
-          dirty: false,
+          dirty: remaining > 0,
           lastSyncedSeq: msg.seq ?? 0,
           updatedAt: Date.now(),
         });

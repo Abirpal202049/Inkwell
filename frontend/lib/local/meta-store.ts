@@ -13,7 +13,9 @@ export interface LocalDocMeta {
   updatedAt: number; // epoch ms
   createdAt: number;
   role: "owner" | "editor" | "viewer";
-  /** Set when local edits exist that the server hasn't acked yet. */
+  /** Mirrors the outbox: true while queued updates await a server ACK.
+   *  Written ONLY by the sync provider (enqueue → true, drained → false);
+   *  advisory — the outbox row count is the authoritative check. */
   dirty: boolean;
   lastSyncedSeq: number;
   /**

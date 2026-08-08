@@ -195,7 +195,12 @@ export function DocumentShell({ docId }: { docId: string }) {
     };
   }, [session, open, docId]);
 
-  // Content edits -> bump local meta updatedAt/dirty (debounced).
+  // Content edits -> mirror title/preview/updatedAt into the dashboard
+  // meta store (debounced). Runs for remote edits too, on purpose — the
+  // thumbnail should reflect what collaborators typed. Deliberately does
+  // NOT touch `dirty`: that flag tracks the outbox (set on enqueue in the
+  // sync provider, cleared on server ACK), and a debounced write here
+  // would land after the ACK and mark fully-synced documents dirty.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onUpdate = () => {
@@ -205,7 +210,6 @@ export function DocumentShell({ docId }: { docId: string }) {
           title: (open.meta.get("title") as string) ?? undefined,
           preview: extractPreviewText(open.ydoc),
           updatedAt: Date.now(),
-          dirty: true,
         });
       }, TITLE_MIRROR_DEBOUNCE_MS);
     };

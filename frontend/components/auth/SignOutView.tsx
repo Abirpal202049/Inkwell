@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CircleAlert, LogOut, WifiOff } from "lucide-react";
 import { getCsrfToken, getSession, type SessionUser } from "@/lib/api";
 import { listLocalDocs } from "@/lib/local/meta-store";
+import { count as outboxCount } from "@/lib/sync/outbox";
 import { purgeAllLocalData } from "@/lib/local/purge";
 
 /**
@@ -24,8 +25,16 @@ export function SignOutView() {
   useEffect(() => {
     void getSession().then(setSession);
     void getCsrfToken().then(setCsrfToken);
+    // "Unsynced" = documents with updates still queued in the outbox —
+    // the authoritative ledger (rows are deleted only on server ACK).
+    // The meta-store `dirty` flag is advisory and can go stale.
     void listLocalDocs()
-      .then((docs) => setDirtyCount(docs.filter((d) => d.dirty).length))
+      .then(async (docs) => {
+        const pending = await Promise.all(
+          docs.map(async (d) => (await outboxCount(d.documentId)) > 0),
+        );
+        setDirtyCount(pending.filter(Boolean).length);
+      })
       .catch(() => setDirtyCount(0));
   }, []);
 
