@@ -35,3 +35,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AI assistant / planning files (local only)
+plan/
+CLAUDE.md
+AGENTS.md
+.claude/
