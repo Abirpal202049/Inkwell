@@ -53,8 +53,11 @@ $$ language sql stable security definer;
 -- documents: members read; owner/editor may update (editors touch
 -- latest_seq and the mirrored title); only the owner deletes.
 drop policy if exists documents_select on documents;
+-- owner_id check, not just membership: Prisma's INSERT ... RETURNING must
+-- see the new row under this SELECT policy, and the owner's membership row
+-- is inserted only after the document row within the create transaction.
 create policy documents_select on documents
-  for select using (is_document_member(id));
+  for select using (owner_id = app_user_id() or is_document_member(id));
 
 drop policy if exists documents_update on documents;
 create policy documents_update on documents
