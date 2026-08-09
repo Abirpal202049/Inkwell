@@ -1,0 +1,4 @@
+# Shell scripts must stay LF — deploy/postgres-init/*.sh runs inside the
+# Postgres (Linux) container and CRLF breaks the shebang.
+*.sh text eol=lf
+Caddyfile text eol=lf

@@ -41,3 +41,4 @@ plan/
 CLAUDE.md
 AGENTS.md
 .claude/
+!.env.prod.example

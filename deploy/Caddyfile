@@ -1,0 +1,19 @@
+# Reverse proxy + automatic HTTPS (Let's Encrypt) for the prod stack.
+# DOMAIN comes from the compose environment. Caddy proxies WebSockets and
+# sets X-Forwarded-Host/Proto automatically (backend/src/server.ts relies
+# on X-Forwarded-Host for OAuth redirect_uris).
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# REST + OAuth + realtime WS go straight to the backend; the Next.js
+	# /api rewrite proxy is only needed in dev.
+	@backend path /api/* /doc /healthz
+	handle @backend {
+		reverse_proxy backend:4000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

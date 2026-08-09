@@ -1,0 +1,22 @@
+# Both images build with the repo root as context (see docker-compose.prod.yml).
+.git
+node_modules
+**/node_modules
+**/.next
+**/coverage
+**/*.tsbuildinfo
+
+# Secrets never enter build context.
+**/.env
+**/.env.*
+!**/.env.example
+!deploy/.env.prod.example
+
+# Not needed inside images.
+plan
+deploy
+docker-compose*.yml
+**/test
+**/vitest.config.ts
+README.md
+**/README.md
