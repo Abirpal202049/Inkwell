@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Search, LogIn, LogOut, Trash2 } from "lucide-react";
+import { FileText, Search, LogIn, LogOut, Trash2, Plus } from "lucide-react";
 import {
   listLocalDocs,
   upsertLocalDoc,
@@ -27,16 +27,14 @@ import { SiteFooter } from "@/components/SiteFooter";
  */
 type Tab = "recent" | "owned" | "shared";
 
-/** Multicolor "+" for the blank-document card, Docs-style. */
+/** "+" for the blank-document card, in the app's blue accent. */
 function NewDocPlus({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 36 36" className={className} aria-hidden>
-      <rect x="15" y="5" width="6" height="10" fill="#4285F4" />
-      <rect x="5" y="15" width="10" height="6" fill="#FBBC04" />
-      <rect x="21" y="15" width="10" height="6" fill="#34A853" />
-      <rect x="15" y="21" width="6" height="10" fill="#EA4335" />
-      <rect x="15" y="15" width="6" height="6" fill="#4285F4" />
-    </svg>
+    <Plus
+      className={cn("text-blue-600 dark:text-blue-400", className)}
+      strokeWidth={1.5}
+      aria-hidden
+    />
   );
 }
 
