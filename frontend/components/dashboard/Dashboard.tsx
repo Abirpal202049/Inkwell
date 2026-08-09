@@ -12,6 +12,7 @@ import {
 } from "@/lib/local/meta-store";
 import { clearDocument as clearOutbox } from "@/lib/sync/outbox";
 import { deleteDocumentStorage } from "@/lib/crdt/doc-manager";
+import { backfillPreviews } from "@/lib/local/preview-backfill";
 import { adoptLocalAccount } from "@/lib/local/purge";
 import { relativeTime, cn } from "@/lib/utils";
 import { DEFAULT_DOC_TITLE } from "@/lib/constants";
@@ -53,7 +54,13 @@ export function Dashboard() {
   const [session, setSession] = useState<SessionUser | null | undefined>(undefined);
 
   useEffect(() => {
-    void listLocalDocs().then(setDocs);
+    void listLocalDocs().then(async (list) => {
+      setDocs(list);
+      // Docs edited here before previews were cached still have content
+      // in their per-doc databases — extract it now instead of showing
+      // skeletons until the next visit.
+      if (await backfillPreviews(list)) setDocs(await listLocalDocs());
+    });
     void getSession().then(setSession);
   }, []);
 
@@ -74,7 +81,9 @@ export function Dashboard() {
           updatedAt: new Date(d.updatedAt).getTime(),
         });
       }
-      setDocs(await listLocalDocs());
+      const merged = await listLocalDocs();
+      setDocs(merged);
+      if (await backfillPreviews(merged)) setDocs(await listLocalDocs());
     })();
   }, [session]);
 
@@ -259,16 +268,29 @@ export function Dashboard() {
                   <div
                     aria-hidden
                     className={cn(
-                      "h-36 overflow-hidden border-b border-zinc-100 bg-white px-4 pt-4 dark:border-zinc-800 dark:bg-zinc-900",
-                      d.preview === undefined && "flex flex-col gap-1.5",
+                      "flex h-36 flex-col overflow-hidden border-b border-zinc-100 bg-white px-4 pb-2 pt-3 dark:border-zinc-800 dark:bg-zinc-900",
+                      d.preview === undefined && "gap-1.5 pt-4",
                     )}
                   >
                     {d.preview !== undefined ? (
-                      // Mini render of the document's actual opening text,
-                      // Docs-style; an empty doc shows a blank page.
-                      <p className="whitespace-pre-wrap wrap-break-word text-[7px] leading-2.75 text-zinc-600 dark:text-zinc-400">
-                        {d.preview}
-                      </p>
+                      // Mini render of page 1, Docs-style: header band on
+                      // top, opening body text, footer pinned at the
+                      // bottom; an empty doc shows a blank page.
+                      <>
+                        {d.previewHeader ? (
+                          <p className="mb-1 shrink-0 truncate text-[7px] leading-2.75 text-zinc-400 dark:text-zinc-500">
+                            {d.previewHeader}
+                          </p>
+                        ) : null}
+                        <p className="min-h-0 flex-1 overflow-hidden whitespace-pre-wrap wrap-break-word text-[7px] leading-2.75 text-zinc-600 dark:text-zinc-400">
+                          {d.preview}
+                        </p>
+                        {d.previewFooter ? (
+                          <p className="mt-1 shrink-0 truncate text-[7px] leading-2.75 text-zinc-400 dark:text-zinc-500">
+                            {d.previewFooter}
+                          </p>
+                        ) : null}
+                      </>
                     ) : (
                       THUMB_LINES.map((w, i) => (
                         <div

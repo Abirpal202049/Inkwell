@@ -35,6 +35,26 @@ export const AUTOSNAPSHOT_MERGE_WINDOW_MS = 600_000;
 /** Fold doc_updates tail into doc_compactions after this many rows. */
 export const COMPACT_AFTER_UPDATES = 500;
 
+/** Attributed-changes replay cap: ranges needing more doc_updates rows
+ *  than this are refused rather than allowed to stall the server. */
+export const MAX_DIFF_REPLAY_ROWS = 20_000;
+
+/**
+ * Audit-log retention (plan/11 §doc_updates growth): doc_updates rows are
+ * pruned once they are BOTH older than this AND already folded into a
+ * compaction — state is never at risk; only per-character attribution
+ * beyond the window is. Version contributors are captured at snapshot
+ * time, so version history attribution survives pruning forever.
+ */
+export const DOC_UPDATES_RETENTION_MS = 90 * 86_400_000; // 90 days
+
+/** Idempotency ledger rows re-ack replays; stale ones age out (plan/13). */
+export const PROCESSED_BATCH_RETENTION_MS = 7 * 86_400_000; // 7 days
+
+/** Prune pass cadence + startup delay (avoids competing with boot work). */
+export const PRUNE_INTERVAL_MS = 6 * 3_600_000; // 6 hours
+export const PRUNE_STARTUP_DELAY_MS = 60_000;
+
 /** Per-connection message rate limit. */
 export const RATE_LIMIT_MSGS = 120;
 export const RATE_LIMIT_WINDOW_MS = 10_000;
@@ -47,6 +67,33 @@ export const PRESENCE_THROTTLE_MS = 50;
 
 /** AI version-label generation is best-effort within this budget. */
 export const AI_LABEL_TIMEOUT_MS = 2_000;
+
+/* --- AI add-ons (plan/08) ------------------------------------------------ */
+
+/** Default Gemini model; override per-deploy with the AI_MODEL env var. */
+export const AI_DEFAULT_MODEL = "gemini-2.5-flash";
+
+/** Per-user fixed-window rate limit across all /ai endpoints. */
+export const AI_RATE_LIMIT_MAX = 20;
+export const AI_RATE_LIMIT_WINDOW_MS = 60_000;
+
+/** Caps on text sent to the model — inputs are truncated, never rejected.
+ *  Gemini Flash has a 1M-token window; ~100k chars (≈25k tokens) covers
+ *  full documents while keeping requests cheap. */
+export const AI_DOC_CONTEXT_MAX_CHARS = 100_000;
+export const AI_SELECTION_MAX_CHARS = 20_000;
+export const AI_PROMPT_MAX_CHARS = 2_000;
+
+/** Output budgets per feature (tokens). */
+export const AI_GENERATE_MAX_TOKENS = 1_024;
+export const AI_SUMMARY_MAX_TOKENS = 1_024;
+export const AI_LABEL_MAX_TOKENS = 128;
+
+/** How much of each version's text feeds the label diff prompt. */
+export const AI_LABEL_CONTEXT_MAX_CHARS = 6_000;
+
+/** localStorage flag: the one-time "meet AI" coach mark was dismissed. */
+export const AI_INTRO_SEEN_KEY = "inkwell-ai-intro-seen";
 
 /** Y.UndoManager: groups a typing burst into one undo step. */
 export const UNDO_CAPTURE_TIMEOUT_MS = 500;

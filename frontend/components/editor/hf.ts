@@ -7,6 +7,7 @@ import { DOMSerializer, type Schema } from "@tiptap/pm/model";
 import { yXmlFragmentToProseMirrorRootNode } from "y-prosemirror";
 import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
+import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style";
 import TextAlign from "@tiptap/extension-text-align";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -20,6 +21,7 @@ import {
   type HfRole,
 } from "@/lib/constants";
 import { PageNumber, PageCount } from "./hf-nodes";
+import { Spacing } from "./spacing";
 
 /**
  * Header/footer document model (plan/16 §2): content lives in six
@@ -157,7 +159,11 @@ export function hfBaseExtensions(): Extensions {
       link: { openOnClick: false, autolink: true },
     }),
     Highlight,
+    TextStyle,
+    FontFamily,
+    FontSize,
     TextAlign.configure({ types: ["heading", "paragraph"] }),
+    Spacing,
     TaskList,
     TaskItem.configure({ nested: true }),
     PageNumber,

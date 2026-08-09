@@ -6,6 +6,9 @@ import { docIdParam, resolveMembership, assertRole } from "./helpers.js";
 import { createVersionSchema, restoreSchema, uuidSchema } from "@shared/schemas/api";
 import { loadDocState, latestVersion, contributorsSince } from "../persistence/doc-store.js";
 import { getLiveDocState, applyRestore } from "../realtime/rooms.js";
+import { suggestVersionLabel } from "../ai/label.js";
+import { extractDocText } from "../ai/text.js";
+import { AI_LABEL_CONTEXT_MAX_CHARS } from "@shared/constants";
 
 export const versionsRouter = Router({ mergeParams: true });
 versionsRouter.use(requireAuth);
@@ -50,6 +53,7 @@ versionsRouter.get("/", async (req, res) => {
         label: true,
         isAuto: true,
         createdAt: true,
+        upToSeq: true,
         author: { select: { name: true, image: true } },
         contributors: {
           select: { user: { select: { id: true, name: true, image: true } } },
@@ -64,6 +68,7 @@ versionsRouter.get("/", async (req, res) => {
       label: v.label,
       isAuto: v.isAuto,
       createdAt: v.createdAt.toISOString(),
+      upToSeq: Number(v.upToSeq),
       createdBy: v.author,
       contributors: v.contributors.map((c) => c.user),
     })),
@@ -81,8 +86,24 @@ versionsRouter.post("/", async (req, res) => {
   const state = await currentState(documentId);
   if (!state) throw errors.conflict("Document has no content to snapshot");
 
-  // AI-generated labels for unlabeled snapshots land in Stage F; until
-  // then the dated fallback from plan/13 applies.
+  // Unlabeled snapshot: propose an AI label from a diff against the
+  // previous version (plan/08 §3) — best-effort within AI_LABEL_TIMEOUT_MS,
+  // falling back to the dated label from plan/13. Never blocks or fails
+  // the snapshot itself.
+  let aiLabel: string | null = null;
+  if (!label) {
+    const prev = await latestVersion(documentId);
+    const prevBytes = prev
+      ? await prisma.documentVersion.findUnique({
+          where: { id: prev.id },
+          select: { stateBytes: true },
+        })
+      : null;
+    aiLabel = await suggestVersionLabel(
+      prevBytes ? extractDocText(new Uint8Array(prevBytes.stateBytes), AI_LABEL_CONTEXT_MAX_CHARS) : null,
+      extractDocText(state, AI_LABEL_CONTEXT_MAX_CHARS),
+    );
+  }
   const fallbackLabel = `Version of ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`;
 
   const audit = await versionAuditFields(documentId);
@@ -90,7 +111,7 @@ versionsRouter.post("/", async (req, res) => {
     tx.documentVersion.create({
       data: {
         documentId,
-        label: label ?? fallbackLabel,
+        label: label ?? aiLabel ?? fallbackLabel,
         stateBytes: Buffer.from(state),
         createdBy: user.id,
         isAuto: false,

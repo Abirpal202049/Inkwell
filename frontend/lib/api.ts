@@ -51,9 +51,34 @@ export interface VersionMeta {
   label: string | null;
   isAuto: boolean;
   createdAt: string;
+  /** Edit-log seq this snapshot covers up to (0 = pre-audit-trail row). */
+  upToSeq: number;
   createdBy: { name: string | null; image: string | null } | null;
   /** Everyone who edited within this version's window (audit trail). */
   contributors: VersionContributor[];
+}
+
+/** One attributed run of text in a changes view. */
+export interface ChangeSegment {
+  text: string;
+  change: "added" | "removed" | null;
+  authorId: string | null;
+  ts: string | null;
+}
+
+export interface ChangeBlock {
+  type: string;
+  level: number | null;
+  change: "added" | "removed" | null;
+  segments: ChangeSegment[];
+}
+
+/** Attributed diff over a range of the document's edit log. */
+export interface DocumentChanges {
+  fromSeq: number;
+  toSeq: number;
+  contributors: VersionContributor[];
+  blocks: ChangeBlock[];
 }
 
 async function json<T>(path: string, init?: RequestInit): Promise<T | null> {
@@ -147,6 +172,22 @@ export async function fetchVersionState(docId: string, versionId: string): Promi
   } catch {
     return null;
   }
+}
+
+/**
+ * Attributed changes (audit trail): pass a seq range for a version window,
+ * or `since` (ISO datetime) for activity over a duration.
+ */
+export function fetchChanges(
+  docId: string,
+  opts: { fromSeq?: number; toSeq?: number; since?: string },
+): Promise<DocumentChanges | null> {
+  const params = new URLSearchParams();
+  if (opts.since !== undefined) params.set("since", opts.since);
+  if (opts.fromSeq !== undefined) params.set("fromSeq", String(opts.fromSeq));
+  if (opts.toSeq !== undefined) params.set("toSeq", String(opts.toSeq));
+  const qs = params.toString();
+  return json(`/api/documents/${docId}/changes${qs ? `?${qs}` : ""}`);
 }
 
 export function restoreVersion(

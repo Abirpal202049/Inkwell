@@ -24,6 +24,11 @@ export interface LocalDocMeta {
    * device; "" means the document is genuinely empty.
    */
   preview?: string;
+  /** Page-1 header/footer text for the thumbnail bands ("" when the
+   *  segment is off or empty). Cached and backfilled alongside `preview`;
+   *  undefined until first extracted. */
+  previewHeader?: string;
+  previewFooter?: string;
 }
 
 const DB_NAME = "inkwell-db";
@@ -98,6 +103,8 @@ export async function upsertLocalDoc(
     dirty: patch.dirty ?? existing?.dirty ?? false,
     lastSyncedSeq: patch.lastSyncedSeq ?? existing?.lastSyncedSeq ?? 0,
     preview: patch.preview ?? existing?.preview,
+    previewHeader: patch.previewHeader ?? existing?.previewHeader,
+    previewFooter: patch.previewFooter ?? existing?.previewFooter,
   };
   await putLocalDoc(merged);
   return merged;

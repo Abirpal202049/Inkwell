@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
+import { HF_FRAGMENTS, type HfKind } from "@/lib/constants";
 
 /**
  * Owns the lifecycle of one open document: the in-memory Y.Doc plus its
@@ -94,14 +95,24 @@ export function deleteDocumentStorage(docId: string): Promise<void> {
  */
 export async function deleteAllDocumentStorage(knownIds: string[]): Promise<void> {
   const ids = new Set(knownIds);
+  // Where the browser can enumerate databases we also sweep orphaned
+  // inkwell-doc-* databases whose meta row was already lost.
+  for (const id of (await listLocalContentDocIds()) ?? []) ids.add(id);
+  await Promise.all([...ids].map(deleteDocumentStorage));
+}
+
+/** Ids of documents whose per-doc content database exists on this device;
+ *  null when the browser can't enumerate databases (no indexedDB.databases()). */
+export async function listLocalContentDocIds(): Promise<Set<string> | null> {
   try {
+    const ids = new Set<string>();
     for (const { name } of await indexedDB.databases()) {
       if (name?.startsWith(IDB_PREFIX)) ids.add(name.slice(IDB_PREFIX.length));
     }
+    return ids;
   } catch {
-    // databases() unsupported — knownIds still covers everything indexed.
+    return null;
   }
-  await Promise.all([...ids].map(deleteDocumentStorage));
 }
 
 /** The Y.XmlFragment the editor binds to. Single fixed name per doc. */
@@ -115,6 +126,9 @@ function nodeText(node: unknown): string {
       .join("");
   }
   if (node instanceof Y.XmlElement) {
+    // Page-number atoms carry no text; show them as page 1, matching the
+    // static fallback in hf-nodes.ts (the thumbnail depicts page 1).
+    if (node.nodeName === "pageNumber" || node.nodeName === "pageCount") return "1";
     return node.toArray().map(nodeText).join("");
   }
   return "";
@@ -136,4 +150,31 @@ export function extractPreviewText(ydoc: Y.Doc, maxChars = 500): string {
     total += text.length + 1;
   }
   return lines.join("\n").slice(0, maxChars).trimEnd();
+}
+
+/**
+ * One header/footer band's text as it appears on page 1 ("" when the
+ * segment is disabled or empty). With "Different first page" on, page 1
+ * shows the `first` variant, so that's what the thumbnail mirrors.
+ */
+export function extractHfPreviewText(ydoc: Y.Doc, kind: HfKind, maxChars = 120): string {
+  const meta = ydoc.getMap("meta");
+  if (meta.get(`${kind}Enabled`) !== true) return "";
+  const role = meta.get("hfDiffFirstPage") === true ? "first" : "default";
+  const frag = ydoc.getXmlFragment(HF_FRAGMENTS[kind][role]);
+  const text = frag.toArray().map(nodeText).join(" ");
+  return text.replace(/\s+/g, " ").trim().slice(0, maxChars);
+}
+
+/** Everything the dashboard thumbnail caches, extracted in one pass. */
+export function extractDocPreview(ydoc: Y.Doc): {
+  preview: string;
+  previewHeader: string;
+  previewFooter: string;
+} {
+  return {
+    preview: extractPreviewText(ydoc),
+    previewHeader: extractHfPreviewText(ydoc, "header"),
+    previewFooter: extractHfPreviewText(ydoc, "footer"),
+  };
 }

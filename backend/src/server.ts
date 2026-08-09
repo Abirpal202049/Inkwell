@@ -6,7 +6,10 @@ import { authHandler, attachSession } from "./auth.js";
 import { documentsRouter } from "./routes/documents.js";
 import { membersRouter } from "./routes/members.js";
 import { versionsRouter } from "./routes/versions.js";
+import { changesRouter } from "./routes/changes.js";
+import { aiRouter, aiStatusRouter } from "./routes/ai.js";
 import { attachRealtime } from "./realtime/index.js";
+import { startPruneScheduler } from "./persistence/prune.js";
 import { ApiError } from "./http.js";
 
 /**
@@ -48,6 +51,10 @@ app.use("/api", attachSession);
 app.use("/api/documents", documentsRouter);
 app.use("/api/documents/:docId/members", membersRouter);
 app.use("/api/documents/:docId/versions", versionsRouter);
+app.use("/api/documents/:docId/changes", changesRouter);
+// AI add-ons (plan/08): doc-scoped generation/summarize + global status.
+app.use("/api/documents/:docId/ai", aiRouter);
+app.use("/api/ai", aiStatusRouter);
 // restore lives under versionsRouter as POST /restore — expose the
 // contract path too (plan/13): /api/documents/:docId/restore
 app.use("/api/documents/:docId/restore", (req, _res, next) => {
@@ -77,6 +84,9 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 const server = createServer(app);
 attachRealtime(server);
+// Retention pruning (plan/11): folded doc_updates past retention +
+// stale idempotency ledger rows.
+startPruneScheduler();
 
 server.listen(env.port, () => {
   console.log(`inkwell-backend listening on :${env.port} (${env.nodeEnv})`);

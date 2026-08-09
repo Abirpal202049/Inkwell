@@ -20,6 +20,11 @@ export const env = {
   /** Allowed Origin header for the WS upgrade (browser connections). */
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:3000",
 
+  /** Gemini key (Google AI Studio). Absent → AI features report disabled. */
+  googleAiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  /** Optional model override; default lives in @shared/constants. */
+  aiModelId: process.env.AI_MODEL,
+
   get isProd() {
     return this.nodeEnv === "production";
   },

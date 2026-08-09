@@ -12,10 +12,13 @@ export function SaveVersionDialog({
   open,
   onClose,
   onSave,
+  aiHint = false,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (label?: string) => void;
+  /** AI is configured: an empty label will be auto-generated (plan/08 §3). */
+  aiHint?: boolean;
 }) {
   const [label, setLabel] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +91,11 @@ export function SaveVersionDialog({
             maxLength={120}
             className="w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800"
           />
+          {aiHint && (
+            <p className="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+              Leave blank and AI will label it from what changed.
+            </p>
+          )}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"

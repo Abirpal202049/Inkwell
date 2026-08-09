@@ -25,4 +25,7 @@ export const errors = {
   conflict: (msg?: string) => new ApiError(409, "CONFLICT", msg),
   tooLarge: () => new ApiError(413, "PAYLOAD_TOO_LARGE"),
   rateLimited: () => new ApiError(429, "RATE_LIMITED"),
+  /** AI features are additive — this signals "not configured", never breakage. */
+  aiUnavailable: () => new ApiError(503, "AI_UNAVAILABLE", "AI features are not configured"),
+  aiFailed: (msg?: string) => new ApiError(502, "AI_FAILED", msg ?? "AI generation failed"),
 };

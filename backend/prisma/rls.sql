@@ -89,6 +89,13 @@ drop policy if exists updates_insert on doc_updates;
 create policy updates_insert on doc_updates
   for insert with check (can_edit_document(document_id));
 
+-- Retention pruning (plan/11) runs from the scheduler with NO user
+-- context — only that system context may delete log rows; user-scoped
+-- transactions never can.
+drop policy if exists updates_delete on doc_updates;
+create policy updates_delete on doc_updates
+  for delete using (app_user_id() is null);
+
 -- document_versions: members read; owner/editor create; only the owner
 -- context deletes (the session-merge in runMaintenance, which runs
 -- system-on-behalf-of-owner, folds a fresh auto snapshot into its

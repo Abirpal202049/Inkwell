@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import Highlight from "@tiptap/extension-highlight";
+import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style";
 import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
@@ -21,6 +22,8 @@ import {
   type PageSizeId,
 } from "./Ruler";
 import { Pagination, setPaginationConfig, type PageInfo } from "./pagination";
+import { Spacing } from "./spacing";
+import { AiCommand } from "./ai-command";
 import {
   PAGE_GAP,
   PAGE_MARGIN_BOTTOM,
@@ -50,6 +53,10 @@ export function useInkwellEditor(
   ydoc: Y.Doc,
   editable: boolean,
   collab?: CollabContext | null,
+  /** Opens the AI menu ("/ai", Ctrl/Cmd+J). Must be referentially stable. */
+  onAiTrigger?: (() => void) | null,
+  /** Empty-doc placeholder; the shell swaps in an AI-teaching one. */
+  placeholder = "Start writing…",
 ): TiptapEditor | null {
   return useEditor(
     {
@@ -65,11 +72,16 @@ export function useInkwellEditor(
           ? [CollaborationCaret.configure({ provider: collab.provider, user: collab.user })]
           : []),
         Highlight,
+        TextStyle,
+        FontFamily,
+        FontSize,
         TextAlign.configure({ types: ["heading", "paragraph"] }),
+        Spacing,
         TaskList,
         TaskItem.configure({ nested: true }),
-        Placeholder.configure({ placeholder: "Start writing…" }),
+        Placeholder.configure({ placeholder }),
         Pagination,
+        AiCommand.configure({ onTrigger: onAiTrigger ?? null }),
       ],
       editorProps: {
         attributes: {
@@ -79,7 +91,7 @@ export function useInkwellEditor(
         },
       },
     },
-    [ydoc, editable, collab?.provider ?? null],
+    [ydoc, editable, collab?.provider ?? null, onAiTrigger ?? null, placeholder],
   );
 }
 

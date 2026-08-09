@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { TITLE_MAX_LENGTH } from "../constants";
+import {
+  TITLE_MAX_LENGTH,
+  AI_PROMPT_MAX_CHARS,
+  AI_SELECTION_MAX_CHARS,
+  AI_DOC_CONTEXT_MAX_CHARS,
+} from "../constants";
 
 /**
  * Wire-format schemas shared by frontend and backend (plan/13).
@@ -45,6 +50,47 @@ export const createVersionSchema = z.object({
 
 export const restoreSchema = z.object({
   versionId: uuidSchema,
+});
+
+/**
+ * Attributed-changes query (audit trail): either an explicit seq range
+ * (version compare) or `since` a timestamp (activity over a duration).
+ * Omitted bounds default to 0 / the document's latest seq.
+ */
+export const changesQuerySchema = z.object({
+  fromSeq: z.coerce.number().int().nonnegative().optional(),
+  toSeq: z.coerce.number().int().nonnegative().optional(),
+  since: z.iso.datetime({ offset: true }).optional(),
+});
+
+/**
+ * AI writing actions (plan/08 §1). "continue" writes from the cursor
+ * using preceding context; "concise"/"grammar" transform the selection;
+ * "custom" applies a free-form instruction to selection or cursor.
+ */
+export const aiActionSchema = z.enum(["continue", "concise", "grammar", "custom"]);
+
+export const aiGenerateSchema = z
+  .object({
+    action: aiActionSchema,
+    /** Free-form instruction — required for "custom". */
+    prompt: z.string().trim().min(1).max(AI_PROMPT_MAX_CHARS).optional(),
+    /** Selected text for transform actions. */
+    selection: z.string().max(AI_SELECTION_MAX_CHARS).optional(),
+    /** Text preceding the cursor, for "continue"/"custom" context. */
+    context: z.string().max(AI_DOC_CONTEXT_MAX_CHARS).optional(),
+  })
+  .refine((v) => v.action !== "custom" || v.prompt !== undefined, {
+    message: "Custom action requires a prompt",
+  })
+  .refine(
+    (v) => !(v.action === "concise" || v.action === "grammar") || (v.selection ?? "").trim() !== "",
+    { message: "Transform actions require a selection" },
+  );
+
+/** Summarize the whole document (default) or just the selected passage. */
+export const aiSummarizeSchema = z.object({
+  selection: z.string().trim().min(1).max(AI_SELECTION_MAX_CHARS).optional(),
 });
 
 export const listQuerySchema = z.object({

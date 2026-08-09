@@ -10,13 +10,17 @@ import {
   LogIn,
   Lock,
   FilePlus2,
+  FileDown,
+  Printer,
   Check,
   PanelTop,
   PanelBottom,
   Hash,
+  Sparkles,
+  ScrollText,
 } from "lucide-react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
-import { openDocument, extractPreviewText } from "@/lib/crdt/doc-manager";
+import { openDocument, extractDocPreview } from "@/lib/crdt/doc-manager";
 import { upsertLocalDoc, getLocalDoc, deleteLocalDoc } from "@/lib/local/meta-store";
 import { clearDocument as clearOutbox } from "@/lib/sync/outbox";
 import { TITLE_MIRROR_DEBOUNCE_MS, DEFAULT_DOC_TITLE } from "@/lib/constants";
@@ -28,11 +32,12 @@ import { AuthorCredit } from "@/components/SiteFooter";
 import { useInkwellEditor, EditorSurface, type CollabContext } from "./Editor";
 import type { PageInfo } from "./pagination";
 import { PAGE_GAP, type HfBandConfig } from "./pagination-core";
-import type { HfKind } from "@/lib/constants";
+import { HF_FRAGMENTS, type HfKind } from "@/lib/constants";
 import {
   useHfSettings,
   enabledFor,
   hfHeightsEqual,
+  renderHfFragment,
   ZERO_HF_HEIGHTS,
   type HfHeights,
 } from "./hf";
@@ -51,6 +56,12 @@ import { StatusFooter } from "./StatusFooter";
 import { PresenceAvatars } from "./PresenceAvatars";
 import { ShareDialog } from "./ShareDialog";
 import { SaveVersionDialog } from "./SaveVersionDialog";
+import { downloadAsPdf, downloadAsWord } from "@/lib/export";
+import { AiMenu } from "./AiMenu";
+import { AiSummaryPanel, type SummaryTarget } from "./AiSummaryPanel";
+import { AiSelectionChip } from "./AiSelectionChip";
+import { getAiStatus } from "@/lib/ai";
+import { AI_INTRO_SEEN_KEY } from "@/lib/constants";
 
 /**
  * Client orchestrator for the editor page (plan/07 §Component
@@ -230,7 +241,7 @@ export function DocumentShell({ docId }: { docId: string }) {
       timer = setTimeout(() => {
         void upsertLocalDoc(docId, {
           title: (open.meta.get("title") as string) ?? undefined,
-          preview: extractPreviewText(open.ydoc),
+          ...extractDocPreview(open.ydoc),
           updatedAt: Date.now(),
         });
       }, TITLE_MIRROR_DEBOUNCE_MS);
@@ -252,7 +263,69 @@ export function DocumentShell({ docId }: { docId: string }) {
         }
       : null;
 
-  const editor = useInkwellEditor(open.ydoc, editable, collab);
+  // ---- AI add-ons (plan/08) ----------------------------------------------
+  /** Whether the backend has an AI key configured (null until known). */
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  /** Caret-anchored "/ai" menu; null = closed. */
+  const [aiAnchor, setAiAnchor] = useState<{ x: number; y: number } | null>(null);
+  /** Summary panel: null closed, {} whole doc, {selection} a passage. */
+  const [summaryTarget, setSummaryTarget] = useState<SummaryTarget | null>(null);
+  /** One-time "meet AI" coach mark under the Tools menu. */
+  const [showAiIntro, setShowAiIntro] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    void getAiStatus().then((enabled) => {
+      if (cancelled) return;
+      setAiEnabled(enabled);
+      if (enabled && !window.localStorage.getItem(AI_INTRO_SEEN_KEY)) setShowAiIntro(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  const dismissAiIntro = useCallback(() => {
+    setShowAiIntro(false);
+    try {
+      window.localStorage.setItem(AI_INTRO_SEEN_KEY, "1");
+    } catch {
+      // storage unavailable (private mode) — the card shows again next visit
+    }
+  }, []);
+
+  // Stable trigger for the editor extension ("/ai", Ctrl/Cmd+J): the
+  // editor depends on this callback, so it must not depend on the editor.
+  const editorRef = useRef<TiptapEditor | null>(null);
+  const openAiMenu = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed || ed.isDestroyed) return;
+    const coords = ed.view.coordsAtPos(ed.state.selection.from);
+    setAiAnchor({ x: coords.left, y: coords.bottom });
+  }, []);
+
+  const editor = useInkwellEditor(
+    open.ydoc,
+    editable,
+    collab,
+    openAiMenu,
+    aiEnabled ? "Start writing — or type /ai for AI help" : undefined,
+  );
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // Why AI can't run right now — null means it can (plan/08: the one
+  // deliberate exception to "works fully offline", clearly communicated).
+  const aiUnavailable = !session
+    ? "Sign in to use AI writing help."
+    : aiEnabled === false
+      ? "AI features aren't configured on this server."
+      : syncState === "offline"
+        ? "AI needs a connection. Everything else keeps working offline — writing help returns when you're back online."
+        : null;
+  const aiReady = session && aiEnabled === true;
 
   // ---- save version -------------------------------------------------------
   const [savingVersion, setSavingVersion] = useState<"idle" | "saving" | "saved">("idle");
@@ -363,7 +436,7 @@ export function DocumentShell({ docId }: { docId: string }) {
   }, [hfEditor]);
 
   // ---- File/View/Insert menus (Docs-style menu bar under the title) -------
-  const [menu, setMenu] = useState<"file" | "view" | "insert" | null>(null);
+  const [menu, setMenu] = useState<"file" | "view" | "insert" | "tools" | null>(null);
   const menusRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menu) return;
@@ -384,6 +457,35 @@ export function DocumentShell({ docId }: { docId: string }) {
     const id = crypto.randomUUID();
     await upsertLocalDoc(id, { title: DEFAULT_DOC_TITLE, role: "owner" });
     router.push(`/documents/${id}?new=1`);
+  };
+
+  // ---- File > Download (client-side, works offline and signed out) --------
+  const docTitle = () => ((open.meta.get("title") as string) ?? DEFAULT_DOC_TITLE);
+  const canDownload = loaded && access === "ok";
+
+  const handleDownloadPdf = () => {
+    setMenu(null);
+    downloadAsPdf(docTitle());
+  };
+
+  const handleDownloadWord = () => {
+    setMenu(null);
+    if (!editor || editor.isDestroyed) return;
+    downloadAsWord(editor.getHTML(), {
+      title: docTitle(),
+      pageSize,
+      margins,
+      hf: {
+        header: hf.settings.headerEnabled
+          ? renderHfFragment(open.ydoc, HF_FRAGMENTS.header.default) || undefined
+          : undefined,
+        footer: hf.settings.footerEnabled
+          ? renderHfFragment(open.ydoc, HF_FRAGMENTS.footer.default) || undefined
+          : undefined,
+        headerMargin: hf.settings.headerMargin,
+        footerMargin: hf.settings.footerMargin,
+      },
+    });
   };
 
   const badgeState: ConnectionState =
@@ -533,6 +635,30 @@ export function DocumentShell({ docId }: { docId: string }) {
                         Version history
                       </Link>
                     )}
+                    <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
+                    <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                      Download
+                    </p>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!canDownload}
+                      onClick={handleDownloadPdf}
+                      className={MENU_ITEM}
+                    >
+                      <Printer className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                      PDF document (.pdf)
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!canDownload || !editor}
+                      onClick={handleDownloadWord}
+                      className={MENU_ITEM}
+                    >
+                      <FileDown className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                      Microsoft Word (.doc)
+                    </button>
                   </div>
                 )}
               </div>
@@ -655,6 +781,96 @@ export function DocumentShell({ docId }: { docId: string }) {
                   </div>
                 )}
               </div>
+              {aiReady && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={menu === "tools"}
+                    onClick={() => {
+                      if (showAiIntro) dismissAiIntro();
+                      setMenu(menu === "tools" ? null : "tools");
+                    }}
+                    className={cnMenuButton(menu === "tools")}
+                  >
+                    Tools
+                    <Sparkles className="ml-1 inline h-3 w-3 align-[-1px] text-violet-500" />
+                  </button>
+                  {showAiIntro && menu !== "tools" && (
+                    <div className="absolute left-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-violet-200 bg-white p-3 shadow-xl dark:border-violet-900 dark:bg-zinc-900">
+                      <div className="flex items-start gap-2.5">
+                        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
+                        <div className="min-w-0 text-[13px] text-zinc-700 dark:text-zinc-200">
+                          <p className="font-medium">Meet your AI writing assistant</p>
+                          <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                            Select any text for quick AI edits, type /ai (or Ctrl+J) to write with
+                            AI, or summarize this document — all here under Tools.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={dismissAiIntro}
+                          className="rounded-full px-3 py-1 text-xs font-medium text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        >
+                          Got it
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            dismissAiIntro();
+                            openAiMenu();
+                          }}
+                          className="rounded-full bg-violet-600 px-3 py-1 text-xs font-medium text-white hover:bg-violet-700"
+                        >
+                          Try it
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {menu === "tools" && (
+                    <div
+                      role="menu"
+                      className="absolute left-0 top-full z-30 mt-1 w-60 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={syncState === "offline"}
+                        title={syncState === "offline" ? "AI needs a connection" : undefined}
+                        onClick={() => {
+                          setMenu(null);
+                          setSummaryTarget({});
+                        }}
+                        className={MENU_ITEM}
+                      >
+                        <ScrollText className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                        Summarize document
+                      </button>
+                      {editable && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={syncState === "offline"}
+                          title={syncState === "offline" ? "AI needs a connection" : undefined}
+                          onClick={() => {
+                            setMenu(null);
+                            openAiMenu();
+                          }}
+                          className={MENU_ITEM}
+                        >
+                          <Sparkles className="h-4 w-4 text-violet-500" />
+                          AI writing help
+                          <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-500">
+                            /ai · Ctrl+J
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2.5">
@@ -723,7 +939,10 @@ export function DocumentShell({ docId }: { docId: string }) {
         <div className="print:hidden">
           {/* While a header/footer band is being edited, the toolbar
               formats that segment (plan/16 §4.2). */}
-          <Toolbar editor={activeBand && hfEditor && !hfEditor.isDestroyed ? hfEditor : editor} />
+          <Toolbar
+            editor={activeBand && hfEditor && !hfEditor.isDestroyed ? hfEditor : editor}
+            onAiClick={aiReady && !activeBand ? openAiMenu : undefined}
+          />
         </div>
       )}
 
@@ -731,7 +950,11 @@ export function DocumentShell({ docId }: { docId: string }) {
           the canvas; pl-6 keeps the ticks centered over the page, which
           sits right of the vertical ruler column below. */}
       {loaded && access === "ok" && (
-        <div className="bg-white pl-6 max-lg:hidden print:hidden dark:bg-zinc-900">
+        // pr-72 mirrors the summary panel's width so the ruler stays
+        // centered over the page while the panel is open.
+        <div
+          className={`bg-white pl-6 max-lg:hidden print:hidden dark:bg-zinc-900 ${summaryTarget ? "md:pr-72" : ""}`}
+        >
           <div className="mx-auto w-full" style={{ maxWidth: PAGE_SIZES[pageSize].width }}>
             <HorizontalRuler
               margins={margins}
@@ -817,6 +1040,7 @@ export function DocumentShell({ docId }: { docId: string }) {
             />
           )}
         </div>
+        <AiSummaryPanel docId={docId} target={summaryTarget} onClose={() => setSummaryTarget(null)} />
       </main>
 
       {/* Single status bar: word count left, author credit centered
@@ -842,7 +1066,26 @@ export function DocumentShell({ docId }: { docId: string }) {
         open={versionDialogOpen}
         onClose={() => setVersionDialogOpen(false)}
         onSave={(label) => void saveVersion(label)}
+        aiHint={aiEnabled === true}
       />
+      {editor && (
+        <AiMenu
+          editor={editor}
+          docId={docId}
+          anchor={aiAnchor}
+          unavailable={aiUnavailable}
+          onSummarizeSelection={(text) => setSummaryTarget({ selection: text })}
+          onClose={() => setAiAnchor(null)}
+        />
+      )}
+      {editor && (
+        <AiSelectionChip
+          editor={editor}
+          visible={Boolean(aiReady && editable && !activeBand && !aiAnchor)}
+          scrollTop={scrollTop}
+          onOpen={openAiMenu}
+        />
+      )}
     </div>
   );
 }

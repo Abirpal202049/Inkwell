@@ -12,9 +12,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.39",
     "@auth/express": "^0.12.3",
     "@auth/prisma-adapter": "^2.11.1",
     "@prisma/client": "^6.19.0",
+    "ai": "^7.0.58",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "jose": "^6.1.3",
