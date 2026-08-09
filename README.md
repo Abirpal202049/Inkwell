@@ -1,4 +1,4 @@
-# Inkwell — local-first collaborative Docs
+# Inkwell — local-first collaborative docs
 
 A local-first, collaborative document editor with offline synchronization,
 deterministic CRDT conflict resolution, and granular version history.
