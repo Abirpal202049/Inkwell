@@ -16,6 +16,15 @@
 -- The helper functions are SECURITY DEFINER (run as the table owner) so
 -- membership lookups inside policies bypass RLS — this is also what
 -- prevents infinite policy recursion on document_members.
+--
+-- SYSTEM CONTEXT: queries issued WITHOUT set_config('app.user_id', ...)
+-- are the backend's own trusted internals (membership resolution,
+-- link-share lookups, realtime room loading, compaction, retention) —
+-- they scope rows with explicit WHERE clauses. Every policy therefore
+-- starts with `app_user_id() is null or ...`: null context = trusted
+-- system, non-null context = user-scoped and fully enforced. Without
+-- this branch the entire app breaks under the non-owner prod role,
+-- because plain-prisma lookups can see no rows at all.
 
 alter table documents                     enable row level security;
 alter table document_members              enable row level security;
@@ -57,40 +66,45 @@ drop policy if exists documents_select on documents;
 -- see the new row under this SELECT policy, and the owner's membership row
 -- is inserted only after the document row within the create transaction.
 create policy documents_select on documents
-  for select using (owner_id = app_user_id() or is_document_member(id));
+  for select using (app_user_id() is null or owner_id = app_user_id() or is_document_member(id));
 
 drop policy if exists documents_update on documents;
 create policy documents_update on documents
-  for update using (can_edit_document(id));
+  for update using (app_user_id() is null or can_edit_document(id));
 
 drop policy if exists documents_delete on documents;
 create policy documents_delete on documents
-  for delete using (owner_id = app_user_id());
+  for delete using (app_user_id() is null or owner_id = app_user_id());
 
 drop policy if exists documents_insert on documents;
 create policy documents_insert on documents
-  for insert with check (owner_id = app_user_id());
+  for insert with check (app_user_id() is null or owner_id = app_user_id());
 
 -- document_members: members see the roster; only the owner mutates it.
 -- (Helpers are security definer, so no policy recursion here.)
 drop policy if exists members_select on document_members;
 create policy members_select on document_members
-  for select using (user_id = app_user_id() or is_document_member(document_id));
+  for select using (app_user_id() is null or user_id = app_user_id() or is_document_member(document_id));
 
+-- System branch also covers link-share auto-join (resolveMembership) and
+-- invite acceptance (auth events), which insert membership rows outside
+-- any user context.
 drop policy if exists members_write on document_members;
 create policy members_write on document_members
-  for all using (owns_document(document_id))
-  with check (owns_document(document_id));
+  for all using (app_user_id() is null or owns_document(document_id))
+  with check (app_user_id() is null or owns_document(document_id));
 
 -- doc_updates: members read; ONLY owner/editor may insert — this is the
 -- database-level guarantee that Viewers cannot push state (plan/06 §3).
+-- The real write path (doc-store appendUpdates) always runs inside
+-- withUserContext(authorId), so the can_edit check still bites there.
 drop policy if exists updates_select on doc_updates;
 create policy updates_select on doc_updates
-  for select using (is_document_member(document_id));
+  for select using (app_user_id() is null or is_document_member(document_id));
 
 drop policy if exists updates_insert on doc_updates;
 create policy updates_insert on doc_updates
-  for insert with check (can_edit_document(document_id));
+  for insert with check (app_user_id() is null or can_edit_document(document_id));
 
 -- Retention pruning (plan/11) runs from the scheduler with NO user
 -- context — only that system context may delete log rows; user-scoped
@@ -105,15 +119,15 @@ create policy updates_delete on doc_updates
 -- successor by delete + recreate).
 drop policy if exists versions_select on document_versions;
 create policy versions_select on document_versions
-  for select using (is_document_member(document_id));
+  for select using (app_user_id() is null or is_document_member(document_id));
 
 drop policy if exists versions_insert on document_versions;
 create policy versions_insert on document_versions
-  for insert with check (can_edit_document(document_id));
+  for insert with check (app_user_id() is null or can_edit_document(document_id));
 
 drop policy if exists versions_delete on document_versions;
 create policy versions_delete on document_versions
-  for delete using (owns_document(document_id));
+  for delete using (app_user_id() is null or owns_document(document_id));
 
 -- document_version_contributors: the audit-trail attribution rows. Scoped
 -- through the owning version's document. (Security definer helper below;
@@ -125,20 +139,20 @@ $$ language sql stable security definer;
 
 drop policy if exists version_contributors_select on document_version_contributors;
 create policy version_contributors_select on document_version_contributors
-  for select using (is_document_member(version_document_id(version_id)));
+  for select using (app_user_id() is null or is_document_member(version_document_id(version_id)));
 
 drop policy if exists version_contributors_insert on document_version_contributors;
 create policy version_contributors_insert on document_version_contributors
-  for insert with check (can_edit_document(version_document_id(version_id)));
+  for insert with check (app_user_id() is null or can_edit_document(version_document_id(version_id)));
 
 -- comments: members read; any member (incl. viewer) may comment (plan/14 §6).
 drop policy if exists comments_select on comments;
 create policy comments_select on comments
-  for select using (is_document_member(document_id));
+  for select using (app_user_id() is null or is_document_member(document_id));
 
 drop policy if exists comments_insert on comments;
 create policy comments_insert on comments
-  for insert with check (is_document_member(document_id) and author_id = app_user_id());
+  for insert with check (app_user_id() is null or (is_document_member(document_id) and author_id = app_user_id()));
 
 -- ---------------------------------------------------------------------------
 -- Production application role (non-owner => RLS applies). Create once per
