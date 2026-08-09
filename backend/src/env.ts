@@ -20,10 +20,13 @@ export const env = {
   /** Allowed Origin header for the WS upgrade (browser connections). */
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:3000",
 
-  /** Gemini key (Google AI Studio). Absent → AI features report disabled. */
-  googleAiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  /** Gemini key (Google AI Studio). Absent → AI features report disabled.
+   *  `|| undefined` because compose passes `${VAR:-}` — a var missing from
+   *  the host .env arrives as "" and must behave like absent, not defeat
+   *  the `??`/Boolean checks downstream. */
+  googleAiApiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined,
   /** Optional model override; default lives in @shared/constants. */
-  aiModelId: process.env.AI_MODEL,
+  aiModelId: process.env.AI_MODEL || undefined,
 
   get isProd() {
     return this.nodeEnv === "production";
