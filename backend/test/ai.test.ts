@@ -43,6 +43,14 @@ describe("extractDocText", () => {
 });
 
 describe("buildGeneratePrompt", () => {
+  it("system prompt teaches the editor's Markdown subset, not free-form output", () => {
+    const { system } = buildGeneratePrompt({ action: "continue" });
+    for (const construct of ["**bold**", "*italic*", "<u>underline</u>", "# / ## / ###", "- [ ] item"]) {
+      expect(system).toContain(construct);
+    }
+    expect(system).toContain("no tables");
+  });
+
   it("continue: includes preceding context and an empty-doc fallback", () => {
     const withContext = buildGeneratePrompt({ action: "continue", context: "Once upon a time" });
     expect(withContext.prompt).toContain("Once upon a time");

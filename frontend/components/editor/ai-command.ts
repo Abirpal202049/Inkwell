@@ -2,6 +2,8 @@ import { Extension, InputRule } from "@tiptap/core";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { DOMParser as PmDomParser } from "@tiptap/pm/model";
+import { markdownToHtml, hasMarkdownSyntax } from "./markdown";
 
 /**
  * AI writing entry points + provenance marking (plan/08 §1).
@@ -100,14 +102,23 @@ export const AiCommand = Extension.create<AiCommandOptions>({
  * editor transactions — with Collaboration active each dispatch becomes a
  * normal Yjs update: synced, offline-queued, versioned and undoable like
  * human typing (plan/08 §1). Newline runs become paragraph breaks.
+ *
+ * The model writes in the toolbar's Markdown subset (see WRITER_SYSTEM
+ * on the backend). Text streams in raw for live feedback; `finish()`
+ * then replaces the inserted range with the parsed rich content — real
+ * bold/heading/list nodes, so the toolbar reflects them and no Markdown
+ * syntax survives in the document. Call it on completion AND on abort
+ * (partial output parses fine; unclosed markers stay literal).
  */
 export function createStreamInserter(editor: TiptapEditor, startPos: number) {
   const start = startPos;
   let pos = startPos;
+  let raw = "";
 
   return {
     insert(chunk: string) {
       if (editor.isDestroyed) return;
+      raw += chunk;
       let tr = editor.state.tr;
       const parts = chunk.split(/\n+/);
       parts.forEach((part, i) => {
@@ -122,6 +133,28 @@ export function createStreamInserter(editor: TiptapEditor, startPos: number) {
       });
       tr.setMeta(aiHighlightKey, { set: { from: start, to: pos } });
       editor.view.dispatch(tr);
+    },
+    /** Swap the raw streamed text for its rich-formatted parse. */
+    finish() {
+      if (editor.isDestroyed || pos === start || !hasMarkdownSyntax(raw)) return;
+      try {
+        // Parse against the schema and apply ONE plain replace step.
+        // (Not insertContentAt: its list auto-join heuristic throws
+        // "Cannot join orderedList onto paragraph" when the inserted
+        // list's neighbor is one of the raw streamed paragraphs.)
+        const el = document.createElement("div");
+        el.innerHTML = markdownToHtml(raw);
+        const parsed = PmDomParser.fromSchema(editor.state.schema).parse(el);
+        const tr = editor.state.tr.replaceWith(start, pos, parsed.content);
+        const end = tr.mapping.map(pos);
+        tr.setMeta(aiHighlightKey, { set: { from: start, to: end } });
+        editor.view.dispatch(tr);
+        pos = end;
+      } catch (err) {
+        // Formatting is best-effort: on any parse/fit failure the raw
+        // streamed text simply stays in place.
+        console.warn("[ai] could not apply rich formatting:", err);
+      }
     },
     /** Position just after everything inserted so far. */
     get end() {

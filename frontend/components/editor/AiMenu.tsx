@@ -124,6 +124,9 @@ function AiMenuBody({
     abortRef.current = null;
 
     if (result.ok || result.aborted) {
+      // Swap the raw Markdown stream for real formatting (even a stopped
+      // partial result), then park the caret after it.
+      inserter.finish();
       onClose();
       if (!editor.isDestroyed) {
         editor.chain().focus().setTextSelection(Math.min(inserter.end, editor.state.doc.content.size)).run();
