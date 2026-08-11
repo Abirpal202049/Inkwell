@@ -29,6 +29,7 @@ import { getSession, getDocument, createVersion, type SessionUser } from "@/lib/
 import { SyncProvider, type SyncState } from "@/lib/sync/provider";
 import { ConnectionBadge, type ConnectionState } from "@/components/ConnectionBadge";
 import { AuthorCredit } from "@/components/SiteFooter";
+import { InkwellLogo } from "@/components/InkwellLogo";
 import { useInkwellEditor, EditorSurface, type CollabContext } from "./Editor";
 import type { PageInfo } from "./pagination";
 import { PAGE_GAP, type HfBandConfig } from "./pagination-core";
@@ -499,7 +500,7 @@ export function DocumentShell({ docId }: { docId: string }) {
             href="/documents"
             className="inline-flex items-center gap-2 text-lg text-zinc-600 dark:text-zinc-50"
           >
-            <FileText className="h-7 w-7 text-blue-600" />
+            <InkwellLogo className="h-7 w-7 text-blue-600" />
             Inkwell
           </Link>
         </header>
@@ -538,7 +539,7 @@ export function DocumentShell({ docId }: { docId: string }) {
             href="/documents"
             className="inline-flex items-center gap-2 text-lg text-zinc-600 dark:text-zinc-50"
           >
-            <FileText className="h-7 w-7 text-blue-600" />
+            <InkwellLogo className="h-7 w-7 text-blue-600" />
             Inkwell
           </Link>
         </header>
@@ -575,7 +576,7 @@ export function DocumentShell({ docId }: { docId: string }) {
       <header className="border-b border-transparent bg-[#f9fbfd] px-4 py-2 print:hidden dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-3">
           <Link href="/documents" aria-label="Back to documents" className="shrink-0">
-            <FileText className="h-9 w-9 text-blue-600 max-sm:h-7 max-sm:w-7" />
+            <InkwellLogo className="h-9 w-9 text-blue-600 max-sm:h-7 max-sm:w-7" />
           </Link>
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex min-w-0 items-center gap-2">

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { FileText, WifiOff, GitMerge, History } from "lucide-react";
+import { WifiOff, GitMerge, History } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
+import { InkwellLogo } from "@/components/InkwellLogo";
 
 const FEATURES = [
   {
@@ -25,7 +26,7 @@ export default function LandingPage() {
     <div className="flex min-h-dvh flex-col">
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-4 py-16 text-center">
         <div className="mb-6 flex items-center gap-3">
-          <FileText className="h-10 w-10 text-blue-600" />
+          <InkwellLogo className="h-10 w-10 text-blue-600" />
           <h1 className="text-4xl font-bold tracking-tight">Inkwell</h1>
         </div>
         <p className="mb-8 max-w-xl text-lg text-zinc-600 dark:text-zinc-300">

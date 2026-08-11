@@ -18,6 +18,7 @@ import { relativeTime, cn } from "@/lib/utils";
 import { DEFAULT_DOC_TITLE } from "@/lib/constants";
 import { getSession, listDocuments, deleteDocument, type SessionUser } from "@/lib/api";
 import { SiteFooter } from "@/components/SiteFooter";
+import { InkwellLogo } from "@/components/InkwellLogo";
 
 /**
  * Google-Docs-style home (plan/14 §4). Renders instantly from the local
@@ -129,7 +130,7 @@ export function Dashboard() {
             href="/"
             className="flex shrink-0 items-center gap-2 text-xl text-zinc-600 dark:text-zinc-50"
           >
-            <FileText className="h-8 w-8 text-blue-600" />
+            <InkwellLogo className="h-8 w-8 text-blue-600" />
             Inkwell
           </Link>
           <div className="relative mx-auto w-full max-w-2xl">
