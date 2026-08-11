@@ -397,6 +397,127 @@ body {
   }
 }
 
+/* --- Landing page hero demo (app/page.tsx) --------------------------------
+   Pure-CSS loop that plays the product story: Maya types and the AI line
+   streams in while "Offline" shows, then the badge flips to "syncing" and
+   "Synced — nothing lost". Static defaults below are the finished frame,
+   so prefers-reduced-motion (or no animation support) shows a complete,
+   truthful screenshot of the product. */
+
+.demo-badge-syncing,
+.demo-badge-synced {
+  opacity: 0;
+}
+
+.demo-maya-line {
+  width: 60%;
+}
+
+.demo-ai-line {
+  width: 80%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-badge-offline {
+    animation: demo-badge-offline 10s infinite;
+  }
+  .demo-badge-syncing {
+    animation: demo-badge-syncing 10s infinite;
+  }
+  .demo-badge-synced {
+    animation: demo-badge-synced 10s infinite;
+  }
+  .demo-maya-line {
+    animation: demo-maya-line 10s infinite;
+  }
+  .demo-ai-line {
+    animation: demo-ai-line 10s infinite;
+  }
+}
+
+/* Timeline (of a 10s loop): 0-20% Maya types · 20-45% AI streams in ·
+   50% connection returns · 52-64% syncing · 66-97% synced · loop. */
+@keyframes demo-badge-offline {
+  0%, 48% { opacity: 1; }
+  52%, 96% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes demo-badge-syncing {
+  0%, 48% { opacity: 0; }
+  52%, 62% { opacity: 1; }
+  66%, 100% { opacity: 0; }
+}
+@keyframes demo-badge-synced {
+  0%, 62% { opacity: 0; }
+  66%, 94% { opacity: 1; }
+  98%, 100% { opacity: 0; }
+}
+@keyframes demo-maya-line {
+  0%, 4% { width: 42%; }
+  20%, 100% { width: 60%; }
+}
+@keyframes demo-ai-line {
+  0%, 22% { width: 0%; }
+  45%, 100% { width: 80%; }
+}
+
+/* --- Landing page hero entrance -------------------------------------------
+   Staggered fade-up on first paint; each element sets its own
+   animation-delay inline. Without animation support or with reduced
+   motion the hero simply renders in place. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-enter {
+    animation: hero-enter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .hero-glow {
+    animation: hero-glow-breathe 9s ease-in-out infinite;
+  }
+}
+
+@keyframes hero-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes hero-glow-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* --- Landing page scroll-reveal -------------------------------------------
+   Sections fade/rise as they enter the viewport. Scroll-driven animations
+   only (no JS, no IntersectionObserver); browsers without
+   animation-timeline support — and reduced-motion users — simply get the
+   content already visible. */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal-up linear both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 45%;
+    }
+  }
+}
+
+/* No `to` block on purpose: the animation settles on the element's own
+   styles, so a finished reveal never pins `transform` and hover lifts on
+   the same element keep working. */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
 /* --- AI-inserted text provenance (plan/08 §1) ----------------------------
    Subtle highlight on freshly streamed AI text, applied as an editor
    DECORATION (never part of the synced document). The ai-command plugin
