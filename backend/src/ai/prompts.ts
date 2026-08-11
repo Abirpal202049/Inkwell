@@ -74,6 +74,23 @@ export function buildGeneratePrompt(req: AiGenerate): { system: string; prompt: 
           selection ?? "",
         ].join("\n"),
       };
+    case "tidy":
+      return {
+        system: WRITER_SYSTEM,
+        prompt: [
+          "The passage below was dictated by voice, so it may have missing",
+          "or wrong punctuation, missing capitalization, filler words",
+          "(\"um\", \"uh\", \"you know\"), false starts and repeated words.",
+          "Clean it up: fix punctuation and capitalization, remove fillers",
+          "and accidental repetitions, and break run-ons into sentences.",
+          "Keep the author's wording, meaning and language - do NOT",
+          "rephrase or improve the writing itself. Return only the",
+          "cleaned-up passage as plain text.",
+          "",
+          "--- passage ---",
+          selection ?? "",
+        ].join("\n"),
+      };
     case "custom":
       return {
         system: WRITER_SYSTEM,
@@ -100,6 +117,20 @@ export function buildSummaryPrompt(text: string, scope: "document" | "selection"
   return scope === "selection"
     ? `Summarize the following passage selected from a larger document.\n\n--- passage ---\n${text}`
     : `Summarize the following document.\n\n--- document ---\n${text}`;
+}
+
+export const TRANSCRIBE_SYSTEM = [
+  "You transcribe audio recordings for a document editor. Output ONLY the",
+  "verbatim transcript of the speech - no preamble, no timestamps, no",
+  "speaker labels, no commentary. Add natural punctuation and",
+  "capitalization. Write in the language actually spoken. If the audio",
+  "contains no intelligible speech, output nothing at all.",
+].join(" ");
+
+export function buildTranscribeInstruction(lang?: string): string {
+  return lang
+    ? `Transcribe this recording. The speaker's language is most likely "${lang}".`
+    : "Transcribe this recording.";
 }
 
 const LABEL_SYSTEM = [

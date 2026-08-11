@@ -1,17 +1,25 @@
-import { Router, type Response } from "express";
-import { streamText } from "ai";
+import express, { Router, type Response } from "express";
+import { streamText, generateText } from "ai";
 import { ok, errors, ApiError } from "../http.js";
 import { requireAuth } from "../auth.js";
 import { docIdParam, resolveMembership, assertRole } from "./helpers.js";
-import { aiGenerateSchema, aiSummarizeSchema } from "@shared/schemas/api";
+import { aiGenerateSchema, aiSummarizeSchema, aiTranscribeQuerySchema } from "@shared/schemas/api";
 import {
   AI_DOC_CONTEXT_MAX_CHARS,
   AI_GENERATE_MAX_TOKENS,
   AI_SUMMARY_MAX_TOKENS,
+  AI_TRANSCRIBE_MAX_TOKENS,
+  AI_AUDIO_MAX_BYTES,
 } from "@shared/constants";
 import { aiEnabled, aiModel, aiProviderOptions } from "../ai/client.js";
 import { aiRateLimit } from "../ai/rate-limit.js";
-import { buildGeneratePrompt, buildSummaryPrompt, SUMMARY_SYSTEM } from "../ai/prompts.js";
+import {
+  buildGeneratePrompt,
+  buildSummaryPrompt,
+  buildTranscribeInstruction,
+  SUMMARY_SYSTEM,
+  TRANSCRIBE_SYSTEM,
+} from "../ai/prompts.js";
 import { extractDocText } from "../ai/text.js";
 import { loadDocState } from "../persistence/doc-store.js";
 import { getLiveDocState } from "../realtime/rooms.js";
@@ -94,6 +102,68 @@ aiRouter.post("/generate", async (req, res) => {
   });
   await pipeText(res, result);
 });
+
+/** Audio containers the browser's MediaRecorder can produce. */
+const AUDIO_MEDIA_TYPES = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/wav",
+]);
+
+/**
+ * POST /transcribe — speech-to-text for browsers without the Web Speech
+ * API (and as a higher-accuracy batch path). The raw recorded clip is the
+ * request body (audio/*, capped well above express.json's 1 MB), Gemini
+ * takes it natively as an audio file part — no extra STT vendor. A WRITE
+ * op (owner|editor): the transcript is destined for the document.
+ */
+aiRouter.post(
+  "/transcribe",
+  express.raw({ type: "audio/*", limit: AI_AUDIO_MAX_BYTES }),
+  async (req, res) => {
+    requireAi();
+    const user = res.locals.user!;
+    const documentId = docIdParam(req);
+    const membership = await resolveMembership(user.id, documentId);
+    assertRole(membership, ["owner", "editor"]);
+    const { lang } = aiTranscribeQuerySchema.parse(req.query);
+
+    // express.raw leaves body as {} when the Content-Type didn't match.
+    const audio = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!audio || audio.length === 0) {
+      throw errors.invalidPayload("Send the recorded clip as an audio/* request body");
+    }
+    const mediaType = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    if (!AUDIO_MEDIA_TYPES.has(mediaType)) {
+      throw errors.invalidPayload(`Unsupported audio type: ${mediaType}`);
+    }
+
+    try {
+      const result = await generateText({
+        model: aiModel(),
+        system: TRANSCRIBE_SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: buildTranscribeInstruction(lang) },
+              { type: "file", data: audio, mediaType },
+            ],
+          },
+        ],
+        maxOutputTokens: AI_TRANSCRIBE_MAX_TOKENS,
+        providerOptions: aiProviderOptions(),
+      });
+      ok(res, { text: result.text.trim() });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn("[ai] transcription failed:", reason);
+      throw errors.aiFailed();
+    }
+  },
+);
 
 /** POST /summarize — streamed summary of the document or, when a
  *  `selection` is sent, of just that passage. A READ op (any member). */

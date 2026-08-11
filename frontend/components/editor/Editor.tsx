@@ -24,6 +24,7 @@ import {
 import { Pagination, setPaginationConfig, type PageInfo } from "./pagination";
 import { Spacing } from "./spacing";
 import { AiCommand } from "./ai-command";
+import { Dictation } from "./dictation";
 import {
   PAGE_GAP,
   PAGE_MARGIN_BOTTOM,
@@ -82,6 +83,7 @@ export function useInkwellEditor(
         Placeholder.configure({ placeholder }),
         Pagination,
         AiCommand.configure({ onTrigger: onAiTrigger ?? null }),
+        Dictation,
       ],
       editorProps: {
         attributes: {

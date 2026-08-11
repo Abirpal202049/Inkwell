@@ -32,6 +32,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DictationControl } from "./DictationControl";
 
 /**
  * Formatting toolbar — pinned feature set from plan/14 §7, shortcuts match
@@ -344,10 +345,16 @@ function FontSizeControl({ editor, current }: { editor: Editor; current: string 
 export function Toolbar({
   editor,
   onAiClick,
+  docId,
+  aiReady = false,
 }: {
   editor: Editor;
   /** When set, shows the AI entry point (plan/08 discoverability). */
   onAiClick?: () => void;
+  /** Enables voice typing (needed for the transcribe/tidy AI calls). */
+  docId?: string;
+  /** Signed in + AI configured: unlocks transcribe fallback and tidy. */
+  aiReady?: boolean;
 }) {
   // Subscribe to only the flags the toolbar renders — avoids re-rendering
   // on every transaction (plan/07 §Performance).
@@ -493,6 +500,12 @@ export function Toolbar({
         spaceBefore={s.spaceBefore}
         spaceAfter={s.spaceAfter}
       />
+      {docId && (
+        <>
+          <Divider />
+          <DictationControl editor={editor} docId={docId} aiReady={aiReady} />
+        </>
+      )}
       {onAiClick && (
         <>
           <Divider />

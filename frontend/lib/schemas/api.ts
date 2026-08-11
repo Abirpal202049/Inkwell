@@ -65,10 +65,11 @@ export const changesQuerySchema = z.object({
 
 /**
  * AI writing actions (plan/08 §1). "continue" writes from the cursor
- * using preceding context; "concise"/"grammar" transform the selection;
- * "custom" applies a free-form instruction to selection or cursor.
+ * using preceding context; "concise"/"grammar"/"tidy" transform the
+ * selection ("tidy" cleans up a dictated passage); "custom" applies a
+ * free-form instruction to selection or cursor.
  */
-export const aiActionSchema = z.enum(["continue", "concise", "grammar", "custom"]);
+export const aiActionSchema = z.enum(["continue", "concise", "grammar", "tidy", "custom"]);
 
 export const aiGenerateSchema = z
   .object({
@@ -84,9 +85,16 @@ export const aiGenerateSchema = z
     message: "Custom action requires a prompt",
   })
   .refine(
-    (v) => !(v.action === "concise" || v.action === "grammar") || (v.selection ?? "").trim() !== "",
+    (v) =>
+      !(v.action === "concise" || v.action === "grammar" || v.action === "tidy") ||
+      (v.selection ?? "").trim() !== "",
     { message: "Transform actions require a selection" },
   );
+
+/** Audio transcription: optional BCP 47 language hint (query param). */
+export const aiTranscribeQuerySchema = z.object({
+  lang: z.string().trim().min(2).max(35).optional(),
+});
 
 /** Summarize the whole document (default) or just the selected passage. */
 export const aiSummarizeSchema = z.object({

@@ -943,6 +943,8 @@ export function DocumentShell({ docId }: { docId: string }) {
           <Toolbar
             editor={activeBand && hfEditor && !hfEditor.isDestroyed ? hfEditor : editor}
             onAiClick={aiReady && !activeBand ? openAiMenu : undefined}
+            docId={docId}
+            aiReady={Boolean(aiReady) && syncState !== "offline"}
           />
         </div>
       )}

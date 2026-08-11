@@ -100,6 +100,42 @@ export function streamAiSummary(
   );
 }
 
+export interface AiTranscribeResult {
+  ok: boolean;
+  /** The transcript ("" when the clip held no intelligible speech). */
+  text?: string;
+  errorCode?: string;
+}
+
+/**
+ * Batch speech-to-text: uploads a recorded clip (the raw audio/* body)
+ * and returns the transcript. The fallback dictation path for browsers
+ * without the Web Speech API; requires editor role.
+ */
+export async function transcribeAudio(
+  docId: string,
+  audio: Blob,
+  lang?: string,
+): Promise<AiTranscribeResult> {
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : "";
+  // Strip codec parameters — the server matches on the bare media type.
+  const mediaType = (audio.type || "audio/webm").split(";")[0]!;
+  try {
+    const res = await fetch(`/api/documents/${docId}/ai/transcribe${query}`, {
+      method: "POST",
+      headers: { "Content-Type": mediaType },
+      body: audio,
+    });
+    const envelope = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, errorCode: envelope?.error?.code ?? "AI_FAILED" };
+    }
+    return { ok: true, text: String(envelope?.data?.text ?? "") };
+  } catch {
+    return { ok: false, errorCode: "NETWORK" };
+  }
+}
+
 /** Human-readable message for an AI error code. */
 export function aiErrorMessage(code?: string): string {
   switch (code) {
@@ -111,6 +147,8 @@ export function aiErrorMessage(code?: string): string {
       return "You need edit access to use AI writing.";
     case "NETWORK":
       return "AI needs a connection — you appear to be offline.";
+    case "PAYLOAD_TOO_LARGE":
+      return "That recording is too large — try a shorter clip.";
     default:
       return "AI generation failed — please try again.";
   }

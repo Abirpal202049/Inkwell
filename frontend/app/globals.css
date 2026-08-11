@@ -518,6 +518,22 @@ body {
   }
 }
 
+/* --- Dictation interim preview -------------------------------------------
+   In-progress speech-recognition text shown as a WIDGET DECORATION at the
+   caret (never part of the synced document) — the dictation plugin swaps
+   it for real text once the recognizer finalizes the phrase. */
+.tiptap-content .dictation-ghost {
+  color: #a1a1aa;
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  .tiptap-content .dictation-ghost {
+    color: #71717a;
+  }
+}
+
 /* --- AI-inserted text provenance (plan/08 §1) ----------------------------
    Subtle highlight on freshly streamed AI text, applied as an editor
    DECORATION (never part of the synced document). The ai-command plugin

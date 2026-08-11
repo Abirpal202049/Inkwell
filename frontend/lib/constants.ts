@@ -92,6 +92,20 @@ export const AI_LABEL_MAX_TOKENS = 128;
 /** How much of each version's text feeds the label diff prompt. */
 export const AI_LABEL_CONTEXT_MAX_CHARS = 6_000;
 
+/* --- Speech-to-text ------------------------------------------------------ */
+
+/** Output budget for audio transcription (audio can carry many words). */
+export const AI_TRANSCRIBE_MAX_TOKENS = 2_048;
+
+/** Server cap on an uploaded audio clip (raw bytes, express.raw limit). */
+export const AI_AUDIO_MAX_BYTES = 10_485_760; // 10 MiB
+
+/** Client cap on a recorded clip — MediaRecorder auto-stops here. */
+export const AI_AUDIO_MAX_MS = 180_000; // 3 minutes
+
+/** localStorage key: the user's chosen dictation language (BCP 47). */
+export const DICTATION_LANG_KEY = "inkwell-dictation-lang";
+
 /** localStorage flag: the one-time "meet AI" coach mark was dismissed. */
 export const AI_INTRO_SEEN_KEY = "inkwell-ai-intro-seen";
 

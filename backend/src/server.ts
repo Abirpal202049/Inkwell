@@ -74,6 +74,15 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     });
     return;
   }
+  // body-parser limit errors (e.g. an oversized audio clip) are
+  // http-errors with a status, not ApiErrors — map the envelope code.
+  if (err && typeof err === "object" && (err as { status?: unknown }).status === 413) {
+    res.status(413).json({
+      ok: false,
+      error: { code: "PAYLOAD_TOO_LARGE", message: "Request body too large" },
+    });
+    return;
+  }
   if (err instanceof ApiError) {
     res.status(err.status).json({ ok: false, error: { code: err.code, message: err.message } });
     return;
