@@ -59,6 +59,8 @@ export interface UseDictationResult {
   /** Human-readable failure; cleared on the next start() or clearError(). */
   error: string | null;
   clearError: () => void;
+  /** Live in-progress phrase (mirrors the caret ghost) for status UI. */
+  interim: string;
   /** Document range covered by the last finished session (for AI tidy). */
   lastSession: { from: number; to: number } | null;
   clearLastSession: () => void;
@@ -69,6 +71,7 @@ export interface UseDictationResult {
 export function useDictation(editor: TiptapEditor | null, lang: string): UseDictationResult {
   const [status, setStatus] = useState<DictationStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [interim, setInterim] = useState("");
   const [lastSession, setLastSession] = useState<{ from: number; to: number } | null>(null);
 
   const recRef = useRef<SpeechRecognitionLike | null>(null);
@@ -109,6 +112,7 @@ export function useDictation(editor: TiptapEditor | null, lang: string): UseDict
     recRef.current?.stop();
     recRef.current = null;
     setStatus("idle");
+    setInterim("");
     const ed = editorRef.current;
     if (ed && !ed.isDestroyed) setDictationPreview(ed, null);
     const session = sessionRef.current;
@@ -122,8 +126,11 @@ export function useDictation(editor: TiptapEditor | null, lang: string): UseDict
     if (!Ctor || !ed || ed.isDestroyed || activeRef.current) return;
 
     setError(null);
+    setInterim("");
     setLastSession(null);
     sessionRef.current = null;
+    // Focus the editor so the caret (where words will land) is visible.
+    ed.commands.focus();
 
     const rec = new Ctor();
     rec.lang = lang;
@@ -153,6 +160,7 @@ export function useDictation(editor: TiptapEditor | null, lang: string): UseDict
         }
       }
       setDictationPreview(editorNow, interim.trim() ? interim.replace(/^\s+/, " ") : null);
+      setInterim(interim.trim());
     };
 
     rec.onerror = (e) => {
@@ -208,5 +216,5 @@ export function useDictation(editor: TiptapEditor | null, lang: string): UseDict
   const clearLastSession = useCallback(() => setLastSession(null), []);
   const clearError = useCallback(() => setError(null), []);
 
-  return { supported, status, error, clearError, lastSession, clearLastSession, start, stop };
+  return { supported, status, error, clearError, interim, lastSession, clearLastSession, start, stop };
 }

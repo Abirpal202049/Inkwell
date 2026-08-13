@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
-import { Check, ChevronDown, Loader2, Mic, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, CircleStop, Loader2, Mic, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { streamAiGenerate, transcribeAudio, aiErrorMessage } from "@/lib/ai";
 import {
@@ -350,6 +350,59 @@ export function DictationControl({
           )}
           {tidyState === "running" ? "Tidying…" : "Tidy with AI"}
         </button>
+      )}
+
+      {/* Docs-style floating status pill: the toolbar icon is easy to
+          overlook, so while the mic is live a prominent indicator floats
+          over the document — pulsing mic, the phrase being recognized
+          (feedback that speech is actually being heard), and Stop. */}
+      {(listening || transcribing) && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-14 left-1/2 z-40 flex max-w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 items-center gap-3 rounded-full border border-zinc-200 bg-white py-2 pl-3 pr-2 shadow-xl print:hidden dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          {transcribing ? (
+            <>
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+              <span className="text-sm text-zinc-700 dark:text-zinc-200">
+                Transcribing your recording…
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-950">
+                <span className="absolute inset-0 animate-ping rounded-full bg-red-400/40" />
+                <Mic className="relative h-4 w-4 text-red-600 dark:text-red-400" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-zinc-700 dark:text-zinc-200">
+                  {live && dictation.interim ? (
+                    <em className="not-italic text-zinc-500 dark:text-zinc-400">
+                      {dictation.interim}
+                    </em>
+                  ) : live ? (
+                    "Listening — start speaking"
+                  ) : (
+                    "Recording — press stop when you're done"
+                  )}
+                </span>
+                <span className="block text-[11px] text-zinc-400 dark:text-zinc-500">
+                  {activeLang?.label ?? lang} · words appear at the cursor
+                </span>
+              </span>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={toggle}
+                className="flex shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+              >
+                <CircleStop className="h-3.5 w-3.5" />
+                Stop
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {error && (
