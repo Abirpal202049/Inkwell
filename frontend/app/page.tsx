@@ -7,6 +7,11 @@ import {
   ArrowRight,
   RefreshCw,
   Check,
+  Mic,
+  PenLine,
+  Minimize2,
+  SpellCheck2,
+  ScrollText,
 } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 import { InkwellLogo } from "@/components/InkwellLogo";
@@ -49,18 +54,51 @@ const STEPS = [
   },
 ];
 
+/** Docs-style remote caret: a thin colored bar in the text flow with the
+ *  collaborator's name flag above it, mirroring the real
+ *  .collaboration-carets styles the editor renders. */
+function RemoteCaret({
+  name,
+  caretClass,
+  flagClass,
+}: {
+  name: string;
+  caretClass: string;
+  flagClass: string;
+}) {
+  return (
+    <span className="relative">
+      <span
+        className={`inline-block h-[1.1em] w-[1.5px] rounded align-[-0.2em] ${caretClass}`}
+      />
+      <span
+        className={`absolute -top-4 left-0 whitespace-nowrap rounded-md rounded-bl-none px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white ${flagClass}`}
+      >
+        {name}
+      </span>
+    </span>
+  );
+}
+
+const PRESENCE = [
+  { initial: "M", color: "bg-emerald-500" },
+  { initial: "S", color: "bg-rose-500" },
+  { initial: "Y", color: "bg-blue-600" },
+];
+
 /** CSS-only mock of the editor that plays the product story on a loop
- *  (keyframes in globals.css §landing demo): Maya types and the AI line
- *  streams in while "Offline" shows, then the badge flips to "syncing"
- *  and "Synced — nothing lost". No client JS ships with the landing
- *  page, and prefers-reduced-motion gets the static final frame. */
+ *  (keyframes in globals.css §landing demo): Maya's sentence types out
+ *  and Sam holds a selection while "Offline" shows, then the badge flips
+ *  to "syncing" and "Synced — nothing lost". Real text, real-looking
+ *  carets — but no client JS ships with the landing page, and
+ *  prefers-reduced-motion gets the static final frame. */
 function EditorPreview() {
   const badgeBase =
     "col-start-1 row-start-1 flex items-center gap-1.5 justify-self-end rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm";
   return (
     <div
       aria-hidden
-      className="relative mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-[#f9fbfd] p-4 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-950"
+      className="relative mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-[#f9fbfd] p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-6 dark:border-zinc-800 dark:bg-zinc-950"
     >
       {/* status badge: offline → syncing → synced (stacked in one grid cell) */}
       <div className="absolute -top-3 right-6 grid">
@@ -84,35 +122,74 @@ function EditorPreview() {
         </div>
       </div>
 
-      {/* paper sheet */}
-      <div className="rounded-lg border border-zinc-200 bg-white px-6 py-7 sm:px-10 sm:py-9 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-5 h-4 w-2/5 rounded bg-zinc-300 dark:bg-zinc-600" />
-
-        <div className="space-y-2.5">
-          <div className="h-2.5 w-full rounded bg-zinc-200 dark:bg-zinc-700" />
-          <div className="h-2.5 w-11/12 rounded bg-zinc-200 dark:bg-zinc-700" />
-
-          {/* Maya's line grows while she "types"; the caret rides the end */}
-          <div className="relative flex items-center gap-0.5">
-            <div className="demo-maya-line h-2.5 rounded bg-zinc-200 dark:bg-zinc-700" />
-            <span className="relative">
-              <span className="block h-3.5 w-0.5 rounded bg-emerald-500" />
-              <span className="absolute -top-5 left-0 rounded-md rounded-bl-none bg-emerald-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-                Maya
+      {/* doc chrome: title + who's here */}
+      <div className="mb-3 flex items-center justify-between gap-3 px-1">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-sm font-medium text-zinc-700 dark:text-zinc-200">
+            Q3 launch plan
+          </span>
+          <span className="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+            Edited just now
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex -space-x-1.5">
+            {PRESENCE.map(({ initial, color }) => (
+              <span
+                key={initial}
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-[#f9fbfd] transition-transform duration-200 hover:z-10 hover:-translate-y-0.5 hover:scale-110 dark:ring-zinc-950 ${color}`}
+              >
+                {initial}
               </span>
+            ))}
+          </div>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            3 editing
+          </span>
+        </div>
+      </div>
+
+      {/* paper sheet */}
+      <div className="rounded-lg border border-zinc-200 bg-white px-6 py-7 text-left shadow-sm sm:px-10 sm:py-9 dark:border-zinc-800 dark:bg-zinc-900">
+        <h3 className="mb-3 text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Q3 launch plan
+        </h3>
+        <div className="space-y-3 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+          <p>
+            Pilot customers get access on Monday. Most of this doc was
+            written on the train, fully offline — every word landed here
+            the moment we were back in range.
+          </p>
+          <p>
+            Sam is reviewing{" "}
+            <span className="rounded-sm bg-rose-500/20 transition-colors hover:bg-rose-500/35 dark:bg-rose-400/25 dark:hover:bg-rose-400/40">
+              the pricing tiers for launch week
             </span>
-          </div>
-
-          <div className="h-2.5 w-full rounded bg-zinc-200 dark:bg-zinc-700" />
-
-          {/* freshly streamed AI text */}
-          <div className="demo-ai-line h-2.5 rounded bg-violet-200 dark:bg-violet-900" />
-
-          {/* line with the local caret */}
-          <div className="flex items-center gap-0.5">
-            <div className="h-2.5 w-1/3 rounded bg-zinc-200 dark:bg-zinc-700" />
-            <span className="block h-3.5 w-0.5 animate-pulse rounded bg-blue-600" />
-          </div>
+            <RemoteCaret
+              name="Sam"
+              caretClass="bg-rose-500"
+              flagClass="bg-rose-500"
+            />{" "}
+            while the rollout checklist keeps growing below.
+          </p>
+          <p>
+            Maya, drafting from hotel wifi:{" "}
+            <span className="demo-typing">
+              &ldquo;sync can wait — writing can&rsquo;t.&rdquo;
+            </span>
+            <RemoteCaret
+              name="Maya"
+              caretClass="bg-emerald-500"
+              flagClass="bg-emerald-500"
+            />
+          </p>
+          <p>
+            <span className="rounded-sm bg-violet-500/15 px-0.5 transition-colors hover:bg-violet-500/25 dark:bg-violet-400/20 dark:hover:bg-violet-400/30">
+              AI summary: three devices edited offline today. Every change
+              merged cleanly — zero conflicts.
+            </span>{" "}
+            <span className="inline-block h-[1.1em] w-[1.5px] animate-pulse rounded bg-blue-600 align-[-0.2em]" />
+          </p>
         </div>
       </div>
     </div>
@@ -215,6 +292,150 @@ export default function LandingPage() {
                   </p>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* voice + AI showcase */}
+        <section className="px-4 py-16">
+          <div className="mx-auto w-full max-w-5xl">
+            <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">
+              Speak it — or ask AI to write it
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-center text-zinc-600 dark:text-zinc-400">
+              Inkwell isn&apos;t just a place to type. Dictate hands-free from
+              the toolbar, and pull in AI exactly where your cursor is.
+            </p>
+
+            <div className="mt-10 grid gap-6 lg:grid-cols-2">
+              {/* speech-to-text */}
+              <div className="reveal rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-800">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-lg bg-blue-50 p-2.5 dark:bg-blue-950">
+                    <Mic className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold">
+                    Speech-to-text, built in
+                  </h3>
+                </div>
+
+                {/* dictation mock */}
+                <div
+                  aria-hidden
+                  className="mt-5 rounded-xl border border-zinc-200 bg-[#f9fbfd] p-4 dark:border-zinc-800 dark:bg-zinc-950"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
+                      <span className="absolute inset-0 rounded-full bg-red-500/50 motion-safe:animate-ping" />
+                      <Mic className="relative h-4 w-4" />
+                    </span>
+                    <span className="flex h-5 items-center gap-0.75 text-blue-600 dark:text-blue-400">
+                      {[0, 180, 360, 90, 270].map((delay, i) => (
+                        <span
+                          key={i}
+                          className="demo-eq-bar h-4 w-0.75 rounded-full bg-current"
+                          style={{ animationDelay: `${delay}ms` }}
+                        />
+                      ))}
+                    </span>
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      Listening…
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                    You say{" "}
+                    <span className="italic">
+                      &ldquo;ship the beta monday full stop&rdquo;
+                    </span>
+                    <br />
+                    Inkwell writes{" "}
+                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                      &ldquo;Ship the beta Monday.&rdquo;
+                    </span>
+                  </p>
+                </div>
+
+                <ul className="mt-5 space-y-2.5 text-sm text-zinc-600 dark:text-zinc-400">
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    Dictate straight into the document — spoken punctuation
+                    like &ldquo;comma&rdquo; and &ldquo;new paragraph&rdquo;
+                    just works.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    No speech support in your browser? Inkwell records the
+                    audio and AI transcribes it.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    One tap and AI tidies the ums, false starts and run-on
+                    sentences.
+                  </li>
+                </ul>
+              </div>
+
+              {/* AI assistant */}
+              <div className="reveal rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-violet-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-800">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-lg bg-violet-50 p-2.5 dark:bg-violet-950">
+                    <Sparkles className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold">
+                    AI, right where your cursor is
+                  </h3>
+                </div>
+
+                {/* AI menu mock — mirrors the real in-editor menu */}
+                <div
+                  aria-hidden
+                  className="mt-5 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <div className="m-1 flex items-center gap-2 rounded-lg border border-zinc-200 px-2.5 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
+                    <Sparkles className="h-4 w-4 shrink-0 text-violet-500" />
+                    <span className="text-[13px] text-zinc-400">
+                      Ask AI to edit the selection…
+                    </span>
+                    <span className="ml-auto inline-block h-[1.1em] w-[1.5px] animate-pulse rounded bg-violet-500" />
+                  </div>
+                  <div className="mt-1">
+                    {(
+                      [
+                        [PenLine, "Continue writing"],
+                        [Minimize2, "Make more concise"],
+                        [SpellCheck2, "Fix spelling & grammar"],
+                        [ScrollText, "Summarize selection"],
+                      ] as const
+                    ).map(([ItemIcon, label]) => (
+                      <div
+                        key={label}
+                        className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-zinc-700 transition-colors hover:bg-violet-50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        <ItemIcon className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <ul className="mt-5 space-y-2.5 text-sm text-zinc-600 dark:text-zinc-400">
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                    AI text streams in highlighted, and stays marked until you
+                    take over — you always know who wrote what.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                    Summarize a selection or the whole document in a side
+                    panel.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                    Saved versions get AI-written labels — like commit
+                    messages you never had to think up.
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </section>

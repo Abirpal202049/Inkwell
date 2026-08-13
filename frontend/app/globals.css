@@ -409,12 +409,15 @@ body {
   opacity: 0;
 }
 
-.demo-maya-line {
-  width: 60%;
-}
-
-.demo-ai-line {
-  width: 80%;
+/* Maya's typed sentence: a typewriter reveal via stepped max-width on an
+   inline-block (overflow clips the not-yet-"typed" text). The resting
+   max-width just needs to exceed the text's natural width — the span
+   settles at its own size, so the caret after it hugs the last word. */
+.demo-typing {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -427,15 +430,12 @@ body {
   .demo-badge-synced {
     animation: demo-badge-synced 10s infinite;
   }
-  .demo-maya-line {
-    animation: demo-maya-line 10s infinite;
-  }
-  .demo-ai-line {
-    animation: demo-ai-line 10s infinite;
+  .demo-typing {
+    animation: demo-typing 10s steps(30, end) infinite;
   }
 }
 
-/* Timeline (of a 10s loop): 0-20% Maya types · 20-45% AI streams in ·
+/* Timeline (of a 10s loop): 6-46% Maya's sentence types out ·
    50% connection returns · 52-64% syncing · 66-97% synced · loop. */
 @keyframes demo-badge-offline {
   0%, 48% { opacity: 1; }
@@ -452,13 +452,30 @@ body {
   66%, 94% { opacity: 1; }
   98%, 100% { opacity: 0; }
 }
-@keyframes demo-maya-line {
-  0%, 4% { width: 42%; }
-  20%, 100% { width: 60%; }
+@keyframes demo-typing {
+  0%, 6% { max-width: 0; }
+  46%, 100% { max-width: 16rem; }
 }
-@keyframes demo-ai-line {
-  0%, 22% { width: 0%; }
-  45%, 100% { width: 80%; }
+
+/* --- Landing page dictation mock ------------------------------------------
+   Tiny "listening" equalizer next to the mic chip; each bar staggers via
+   an inline animation-delay. Static full-height bars under reduced
+   motion. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-eq-bar {
+    animation: demo-eq 1.1s ease-in-out infinite;
+  }
+}
+
+@keyframes demo-eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 /* --- Landing page hero entrance -------------------------------------------
