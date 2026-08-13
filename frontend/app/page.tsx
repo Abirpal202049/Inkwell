@@ -12,6 +12,11 @@ import {
   Minimize2,
   SpellCheck2,
   ScrollText,
+  Bookmark,
+  Activity,
+  RotateCcw,
+  Users,
+  Printer,
 } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 import { InkwellLogo } from "@/components/InkwellLogo";
@@ -36,6 +41,16 @@ const FEATURES = [
     Icon: Sparkles,
     title: "AI writing tools",
     body: "Summarize, rewrite, and continue your draft in place — with every AI edit clearly marked until you accept it.",
+  },
+  {
+    Icon: Users,
+    title: "Share with roles",
+    body: "Invite people as editors or viewers. Owners can change roles or revoke access at any time.",
+  },
+  {
+    Icon: Printer,
+    title: "Real pages",
+    body: "A4 and Letter sheets with rulers, headers, footers and page numbers — and clean print output.",
   },
 ];
 
@@ -277,7 +292,7 @@ export default function LandingPage() {
             <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">
               Built for the moments the network isn&apos;t there
             </h2>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {FEATURES.map(({ Icon, title, body }) => (
                 <div
                   key={title}
@@ -433,6 +448,181 @@ export default function LandingPage() {
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                     Saved versions get AI-written labels — like commit
                     messages you never had to think up.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* version control + activity showcase */}
+        <section className="border-t border-zinc-200 px-4 py-16 dark:border-zinc-800">
+          <div className="mx-auto w-full max-w-5xl">
+            <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">
+              Every change, on the record
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-center text-zinc-600 dark:text-zinc-400">
+              Version control and a full audit trail are built into every
+              document — see what changed, who changed it, and roll back
+              without losing a thing.
+            </p>
+
+            <div className="mt-10 grid gap-6 lg:grid-cols-2">
+              {/* version history */}
+              <div className="reveal rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-800">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-lg bg-blue-50 p-2.5 dark:bg-blue-950">
+                    <History className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold">
+                    Version history that can&apos;t hurt you
+                  </h3>
+                </div>
+
+                {/* timeline mock — mirrors the real history panel */}
+                <div
+                  aria-hidden
+                  className="mt-5 space-y-1.5 rounded-xl border border-zinc-200 bg-[#f9fbfd] p-2 text-left dark:border-zinc-800 dark:bg-zinc-950"
+                >
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900 dark:bg-blue-950/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium text-zinc-800 dark:text-zinc-100">
+                        <Bookmark className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                        Final pricing pass
+                      </span>
+                      <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        Current
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      Today, 9:41 AM
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5">
+                      <span className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Maya
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                        Sam
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="group/row flex items-center justify-between gap-2 rounded-lg p-3 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900">
+                    <div>
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium text-zinc-700 dark:text-zinc-200">
+                        <Sparkles className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+                        Restructured intro, added rollout plan
+                      </span>
+                      <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Yesterday, 6:12 PM
+                      </div>
+                    </div>
+                    <span className="flex items-center gap-1 rounded-full border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-600 opacity-0 transition-opacity group-hover/row:opacity-100 dark:border-zinc-700 dark:text-zinc-300">
+                      <RotateCcw className="h-3 w-3" />
+                      Restore
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 rounded-lg p-3 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900">
+                    <div>
+                      <span className="text-[13px] font-medium text-zinc-700 dark:text-zinc-200">
+                        Aug 10, 2:03 PM
+                      </span>
+                      <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Auto snapshot
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <ul className="mt-5 space-y-2.5 text-sm text-zinc-600 dark:text-zinc-400">
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    Restores are non-destructive — history stays intact, even
+                    while others keep editing.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    AI names your snapshots for you — like commit messages,
+                    without the typing.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    Preview any version read-only before you decide.
+                  </li>
+                </ul>
+              </div>
+
+              {/* activity / audit trail */}
+              <div className="reveal rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-800">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-lg bg-emerald-50 p-2.5 dark:bg-emerald-950">
+                    <Activity className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold">
+                    See who changed what
+                  </h3>
+                </div>
+
+                {/* attributed-changes mock — mirrors the Activity view */}
+                <div
+                  aria-hidden
+                  className="mt-5 rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      <Activity className="h-3.5 w-3.5" />
+                      Activity
+                    </span>
+                    <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                      Last 24 hours
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+                    Pilot customers get access{" "}
+                    <span className="text-rose-500 line-through opacity-75">
+                      sometime next week
+                    </span>{" "}
+                    <span className="border-b-2 border-emerald-500 bg-emerald-500/10 transition-colors hover:bg-emerald-500/25">
+                      on Monday, right after the sync demo
+                    </span>
+                    . Pricing ships with{" "}
+                    <span className="border-b-2 border-rose-500 bg-rose-500/10 transition-colors hover:bg-rose-500/25">
+                      three tiers, billed monthly or yearly
+                    </span>
+                    .
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-zinc-200 pt-2.5 dark:border-zinc-800">
+                    <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Maya
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                      Sam
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="h-2 w-2 rounded-full bg-blue-600" />
+                      You
+                    </span>
+                  </div>
+                </div>
+
+                <ul className="mt-5 space-y-2.5 text-sm text-zinc-600 dark:text-zinc-400">
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    Every insertion and deletion is attributed, in the same
+                    color as that person&apos;s live cursor.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    Filter the trail from the last hour back to all time.
+                  </li>
+                  <li className="flex gap-2.5">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    Hover any change to see exactly who made it, and when.
                   </li>
                 </ul>
               </div>
